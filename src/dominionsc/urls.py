@@ -83,8 +83,7 @@ def gb_download_url(
 ) -> str:
     """Green Button interval-data export for a given account/measurement type."""
     return (
-        config.bidgely_endpoint
-        + f"/v2.0/dashboard/users/{user_id}/gb-download"
+        config.bidgely_endpoint + f"/v2.0/dashboard/users/{user_id}/gb-download"
         f"?start={start_timestamp}&end={end_timestamp}"
         f"&measurement-type={measurement_type}&file-type=XML"
     )

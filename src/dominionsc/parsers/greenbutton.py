@@ -63,9 +63,7 @@ def parse_usage_reads(xml_text: str, timezone: str, url: str | None = None) -> l
             if not entry["title"].startswith("Interval Consumption"):
                 continue
 
-            intervals = _ensure_list(
-                entry["content"]["espi:IntervalBlock"]["espi:IntervalReading"]
-            )
+            intervals = _ensure_list(entry["content"]["espi:IntervalBlock"]["espi:IntervalReading"])
 
             for interval in intervals:
                 time_start = int(interval["espi:timePeriod"]["espi:start"])

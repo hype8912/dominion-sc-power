@@ -66,7 +66,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="csv file to store data",
     )
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         help="enable verbose logging",
         action="count",
         default=0,
@@ -118,9 +119,7 @@ async def run(args: argparse.Namespace) -> int:
     Returns an exit code (0 = success, non-zero = error).
     Separated from __main__ so it can be tested without subprocess.
     """
-    logging.basicConfig(
-        level=logging.DEBUG - args.verbose + 1 if args.verbose > 0 else logging.INFO
-    )
+    logging.basicConfig(level=logging.DEBUG - args.verbose + 1 if args.verbose > 0 else logging.INFO)
 
     username = args.username or input("Username: ")
     password = args.password or getpass("Password: ")
@@ -167,12 +166,14 @@ async def run(args: argparse.Namespace) -> int:
                         args.end_date,
                     )
                     for usage_read in usage_data:
-                        writer.writerow([
-                            account,
-                            usage_read.start_time,
-                            usage_read.end_time,
-                            usage_read.consumption,
-                        ])
+                        writer.writerow(
+                            [
+                                account,
+                                usage_read.start_time,
+                                usage_read.end_time,
+                                usage_read.consumption,
+                            ]
+                        )
         else:
             for account in measurement_types:
                 usage_data = await dominionsc.async_get_usage_reads(
@@ -183,12 +184,7 @@ async def run(args: argparse.Namespace) -> int:
                 print(f"\n[{account}]")
                 print("start_time\tend_time\tconsumption")
                 for usage_read in usage_data:
-                    print(
-                        f"{usage_read.start_time}\t"
-                        f"{usage_read.end_time}\t"
-                        f"{usage_read.consumption}"
-                    )
-
+                    print(f"{usage_read.start_time}\t{usage_read.end_time}\t{usage_read.consumption}")
     return 0
 
 

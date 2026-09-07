@@ -165,6 +165,7 @@ class TestParseForecast:
     def test_parses_valid_payload(self):
         """Happy path: all fields present and valid."""
         from dominionsc.forecast import Forecast
+
         result = parse_forecast(self._make_payload())
         assert isinstance(result, Forecast)
         assert result.start_date == date(2026, 8, 13)
@@ -194,8 +195,10 @@ class TestParseForecast:
 
     def test_forecasted_cost_is_rounded(self):
         """forecasted_cost is rounded to two decimal places."""
-        result = parse_forecast(self._make_payload(
-            currentCostPerDay=3.333,
-            numberOfDaysInCurrentBill=30,
-        ))
+        result = parse_forecast(
+            self._make_payload(
+                currentCostPerDay=3.333,
+                numberOfDaysInCurrentBill=30,
+            )
+        )
         assert result.forecasted_cost == round(3.333 * 30, 2)

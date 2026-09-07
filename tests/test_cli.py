@@ -107,13 +107,21 @@ class TestRunCSV:
         """CSV output includes a header row with service column."""
         out = tmp_path / "out.csv"
         parser = build_parser()
-        args = parser.parse_args([
-            "--username", "u", "--password", "p",
-            "--csv", str(out),
-        ])
+        args = parser.parse_args(
+            [
+                "--username",
+                "u",
+                "--password",
+                "p",
+                "--csv",
+                str(out),
+            ]
+        )
 
-        with patch("dominionsc.cli.aiohttp.ClientSession") as mock_session_cls, \
-             patch("dominionsc.cli.DominionSC", return_value=_mock_dominionsc()):
+        with (
+            patch("dominionsc.cli.aiohttp.ClientSession") as mock_session_cls,
+            patch("dominionsc.cli.DominionSC", return_value=_mock_dominionsc()),
+        ):
             mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
             await run(args)
@@ -126,13 +134,21 @@ class TestRunCSV:
         """Every data row starts with the measurement type (account name)."""
         out = tmp_path / "out.csv"
         parser = build_parser()
-        args = parser.parse_args([
-            "--username", "u", "--password", "p",
-            "--csv", str(out),
-        ])
+        args = parser.parse_args(
+            [
+                "--username",
+                "u",
+                "--password",
+                "p",
+                "--csv",
+                str(out),
+            ]
+        )
 
-        with patch("dominionsc.cli.aiohttp.ClientSession") as mock_session_cls, \
-             patch("dominionsc.cli.DominionSC", return_value=_mock_dominionsc()):
+        with (
+            patch("dominionsc.cli.aiohttp.ClientSession") as mock_session_cls,
+            patch("dominionsc.cli.DominionSC", return_value=_mock_dominionsc()),
+        ):
             mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
             await run(args)
@@ -147,10 +163,16 @@ class TestRunCSV:
         """Multi-account output is all in one file, not overwritten per account."""
         out = tmp_path / "out.csv"
         parser = build_parser()
-        args = parser.parse_args([
-            "--username", "u", "--password", "p",
-            "--csv", str(out),
-        ])
+        args = parser.parse_args(
+            [
+                "--username",
+                "u",
+                "--password",
+                "p",
+                "--csv",
+                str(out),
+            ]
+        )
 
         # Two accounts, two reads each
         reads_electric = _make_usage_reads()
@@ -164,16 +186,14 @@ class TestRunCSV:
 
         mock = MagicMock()
         mock.async_login = AsyncMock()
-        mock.async_get_accounts = AsyncMock(
-            return_value=[["ELECTRIC", "GAS"], "3005 ELLINGTON DR"]
-        )
-        mock.async_get_usage_reads = AsyncMock(
-            side_effect=[reads_electric, reads_gas]
-        )
+        mock.async_get_accounts = AsyncMock(return_value=[["ELECTRIC", "GAS"], "3005 ELLINGTON DR"])
+        mock.async_get_usage_reads = AsyncMock(side_effect=[reads_electric, reads_gas])
         mock.async_get_forecast = AsyncMock()
 
-        with patch("dominionsc.cli.aiohttp.ClientSession") as mock_session_cls, \
-             patch("dominionsc.cli.DominionSC", return_value=mock):
+        with (
+            patch("dominionsc.cli.aiohttp.ClientSession") as mock_session_cls,
+            patch("dominionsc.cli.DominionSC", return_value=mock),
+        ):
             mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
             await run(args)
@@ -191,13 +211,21 @@ class TestRunCSV:
         """run() returns exit code 0 on success."""
         out = tmp_path / "out.csv"
         parser = build_parser()
-        args = parser.parse_args([
-            "--username", "u", "--password", "p",
-            "--csv", str(out),
-        ])
+        args = parser.parse_args(
+            [
+                "--username",
+                "u",
+                "--password",
+                "p",
+                "--csv",
+                str(out),
+            ]
+        )
 
-        with patch("dominionsc.cli.aiohttp.ClientSession") as mock_session_cls, \
-             patch("dominionsc.cli.DominionSC", return_value=_mock_dominionsc()):
+        with (
+            patch("dominionsc.cli.aiohttp.ClientSession") as mock_session_cls,
+            patch("dominionsc.cli.DominionSC", return_value=_mock_dominionsc()),
+        ):
             mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
             result = await run(args)
