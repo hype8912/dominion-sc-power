@@ -1,11 +1,11 @@
 # Refactor Plan — `dominion-sc-power`
 
-**Status:** Phases 1–3 complete (2026-09-05); Phases 4–5 not started
+**Status:** Phases 1–4 complete (2026-09-05); Phase 5 not started
 **Written against:** working tree state of 2026-09-05, after `Forecast` / `UsageRead`
 were extracted into `forecast.py` / `usage_read.py`, and after the
 `BIDGELY_PILOT_ID` + timezone fixes were applied.
 **Baseline:** 58 tests passing, `dominionsc.py` at 99% line coverage.
-**Current:** 74 tests passing (+16 fixture-based parser tests), all library modules
+**Current:** 74 tests passing (unchanged since Phase 3), all library modules
 at 100% coverage except `__main__.py` (0%) and `helpers.py` (67%). `ruff check .` clean.
 
 ---
@@ -363,27 +363,54 @@ skipped) when multi-register support is implemented.
 
 ---
 
-### Phase 4 — Models and account shape
+### Phase 4 — Models and account shape — ✅ DONE (with disclosed breaking-change decision)
 
 Addresses **F6**.
 
-- [ ] Create `models/` package; move `forecast.py` and `usage_read.py` into it.
-- [ ] Add `models/account.py` with an `AccountInfo` dataclass:
-      `measurement_types: list[str]`, `service_address_and_account_no: str`.
-- [ ] Change `LoginFlow` to return `AccountInfo` instead of the positional list.
-- [ ] Update `async_get_accounts` and any consumer access accordingly.
+**Status:** Implemented and verified 2026-09-05. 74/74 tests pass with
+**zero test edits** — the external contract of `async_get_accounts()` is
+unchanged. `ruff check .` clean. `__all__` unchanged.
+
+- [x] Create `models/` package; `Forecast` and `UsageRead` moved to
+      `models/forecast.py` and `models/usage_read.py`. Root-level
+      `forecast.py` and `usage_read.py` converted to one-line re-export
+      shims, so `from dominionsc.forecast import Forecast` (tests) and
+      `from dominionsc import Forecast` (`ha-dominion-sc`) continue to
+      resolve the **same class object** — verified by identity check
+      (`Forecast is F2 is F3 → True True`).
+- [x] `models/account.py`: `AccountInfo` dataclass with
+      `measurement_types: list[str]` and `service_address_and_account_no: str`,
+      plus `to_legacy_list()` for backward-compat conversion.
+- [x] `LoginFlow.execute()` builds `AccountInfo` instead of the old
+      positional list (`accounts = [[]]`, `accounts.append(addr)`,
+      `accounts[0].append(type)`). Those three forms of positional
+      access no longer exist anywhere in `src/dominionsc/` — grep-verified.
+- [x] `async_get_accounts()` continues returning the legacy
+      `[[measurement_types], service_addr]` format via
+      `account_info.to_legacy_list()` at the `LoginFlow` return boundary.
+      This is the deliberate backward-compat decision (see below).
+- [x] Internal imports in `parsers/`, `client.py`, and `__init__.py`
+      updated to reference `models/` directly rather than the shims.
+
+**Breaking-change decision — recorded, not silently deferred:**
+The plan acceptance criterion says “No `accounts[0]` / `accounts[1]`
+positional access anywhere.” That criterion is met **inside the library**:
+`auth.py` has no positional list construction. But `ha-dominion-sc`
+coordinator.py still uses tuple destructuring:
+```python
+accounts, service_addr_account_no = await self.api.async_get_accounts()
+```
+Changing `async_get_accounts()` to return `AccountInfo` directly would
+break that line without a coordinated change in `ha-dominion-sc` and a
+minor version bump. Given the current goal (get HA working first, refactor
+upstream separately), the external API is left unchanged. The full
+`AccountInfo` return type is a follow-up tracked separately.
 
 **Acceptance:**
 
-- No `accounts[0]` / `accounts[1]` positional access anywhere.
-- `__init__.py` still exports `Forecast` and `UsageRead` from the package root.
-- Tests green.
-
-> **Breaking-change note:** `async_get_accounts()` currently returns the
-> positional list and `ha-dominion-sc` calls it as
-> `accounts, service_addr = await self.api.async_get_accounts()`. Either keep a
-> backwards-compatible return shape or coordinate a matching change in
-> `ha-dominion-sc` and bump the minor version. **Decide before starting Phase 4.**
+- [x] No `accounts[0]` / `accounts[1]` / `accounts.append` in `src/dominionsc/` — grep-verified.
+- [x] `__init__.py` still exports `Forecast` and `UsageRead` from the package root.
+- [x] Tests green — 74/74, zero edits.
 
 ---
 
@@ -447,4 +474,4 @@ and confirm the old assertion was wrong (as was the case for the hardcoded
 - [x] Pilot ID, user agent, endpoints, and timezone each appear in exactly one place.
 - [ ] `uv run pytest` green; coverage on library modules no lower than baseline.
 - [ ] `uv run ruff check .` clean.
-- [ ] `dominionsc.__all__` unchanged from baseline.
+- [x] `dominionsc.__all__` unchanged from baseline.
