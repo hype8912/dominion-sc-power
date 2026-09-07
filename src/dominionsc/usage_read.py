@@ -1,13 +1,12 @@
-"""Usage read data model."""
+"""Backward-compatible re-export shim.
 
-from dataclasses import dataclass
-from datetime import datetime
+UsageRead has moved to models/usage_read.py. This shim keeps
+``from dominionsc.usage_read import UsageRead`` working for existing callers
+(tests, ha-dominion-sc, downstream code).
 
+See docs/REFACTOR_PLAN.md Phase 4.
+"""
 
-@dataclass
-class UsageRead:
-    """A read from the meter that has consumption data."""
+from .models.usage_read import UsageRead
 
-    start_time: datetime
-    end_time: datetime
-    consumption: float  # units: Wh or Ft^3
+__all__ = ["UsageRead"]

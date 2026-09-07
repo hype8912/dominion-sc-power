@@ -2,9 +2,9 @@
 
 from .dominionsc import DominionSC, DominionSCTFAHandler
 from .exceptions import ApiException, CannotConnect, InvalidAuth, MfaChallenge
-from .forecast import Forecast
 from .helpers import create_cookie_jar
-from .usage_read import UsageRead
+from .models.forecast import Forecast
+from .models.usage_read import UsageRead
 
 __all__ = [
     "ApiException",

@@ -9,7 +9,7 @@ See docs/REFACTOR_PLAN.md Phase 3.
 from datetime import datetime
 
 from ..exceptions import ApiException
-from ..forecast import Forecast
+from ..models.forecast import Forecast
 
 
 def parse_forecast(payload: dict, url: str | None = None) -> Forecast:

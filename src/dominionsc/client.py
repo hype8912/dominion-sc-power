@@ -20,11 +20,11 @@ from . import urls as _urls
 from .auth import LoginFlow, find_verification_token
 from .config import UtilityConfig
 from .exceptions import ApiException, CannotConnect, InvalidAuth
-from .forecast import Forecast
+from .models.forecast import Forecast
+from .models.usage_read import UsageRead
 from .parsers.forecast import parse_forecast
 from .parsers.greenbutton import parse_usage_reads
 from .transport import DominionSCURLHandler
-from .usage_read import UsageRead
 
 _LOGGER = logging.getLogger(__file__)
 

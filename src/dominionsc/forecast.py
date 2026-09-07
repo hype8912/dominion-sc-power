@@ -1,16 +1,12 @@
-"""Forecast data model."""
+"""Backward-compatible re-export shim.
 
-from dataclasses import dataclass
-from datetime import date
+Forecast has moved to models/forecast.py. This shim keeps
+``from dominionsc.forecast import Forecast`` working for existing callers
+(tests, ha-dominion-sc, downstream code).
 
+See docs/REFACTOR_PLAN.md Phase 4.
+"""
 
-@dataclass
-class Forecast:
-    """Forecast data for an account. Includes both electric and gas (where applicable)."""
+from .models.forecast import Forecast
 
-    start_date: date
-    end_date: date
-    current_date: date
-    cost_to_date: float
-    forecasted_cost: float
-    typical_cost: float
+__all__ = ["Forecast"]

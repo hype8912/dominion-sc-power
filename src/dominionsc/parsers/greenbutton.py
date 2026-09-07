@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 import xmltodict
 
 from ..exceptions import ApiException
-from ..usage_read import UsageRead
+from ..models.usage_read import UsageRead
 
 
 def _ensure_list(value: object) -> list:

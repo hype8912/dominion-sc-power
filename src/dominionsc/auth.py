@@ -15,6 +15,7 @@ from . import headers as _headers
 from . import urls as _urls
 from .config import UtilityConfig
 from .exceptions import ApiException, CannotConnect, InvalidAuth, MfaChallenge
+from .models.account import AccountInfo
 from .transport import DominionSCURLHandler
 
 _LOGGER = logging.getLogger(__file__)
@@ -239,13 +240,19 @@ class LoginFlow:
         except Exception as err:
             raise ApiException("Unable to get accessToken or userId.", url=url7, response_text=r7) from err
 
-        accounts = [[]]
-        accounts.append(serviceAddressAndAccountNo)
+        account_info = AccountInfo(
+            measurement_types=[],
+            service_address_and_account_no=serviceAddressAndAccountNo,
+        )
         try:
             for dataTypes in json.loads(r7)["payload"]["userTypeDetails"]["measurementToUserTypeMappings"]:
                 if dataTypes["measurementType"] in ["ELECTRIC", "GAS"]:
-                    accounts[0].append(dataTypes["measurementType"])
+                    account_info.measurement_types.append(dataTypes["measurementType"])
         except Exception as err:
             raise ApiException("Unable to decode measurement type from wc-session.", url=url7, response_text=r7) from err
 
-        return accessToken, userId, accounts
+        # Convert to the backward-compat positional format that async_get_accounts()
+        # returns and that ha-dominion-sc destructures as:
+        #   accounts, service_addr = await self.api.async_get_accounts()
+        # See AccountInfo.to_legacy_list() and docs/REFACTOR_PLAN.md Phase 4.
+        return accessToken, userId, account_info.to_legacy_list()
