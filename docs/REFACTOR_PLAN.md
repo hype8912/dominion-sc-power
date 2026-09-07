@@ -273,7 +273,7 @@ Phase 2 or as a dedicated cleanup pass is an open decision, not yet scheduled.
 
 ---
 
-### Phase 2 — Authentication — ✅ CORE DONE (client.py rename deferred)
+### Phase 2 — Authentication — ✅ FULLY DONE
 
 Addresses **F7 (done in Phase 1), F8 (done)**.
 
@@ -283,13 +283,19 @@ Addresses **F7 (done in Phase 1), F8 (done)**.
       (backward compat — tests call it directly with the original signature).
 - [x] Fresh header dicts per step, no mutation — was already true after Phase 1.
 - [x] `.utility` TYPE_CHECKING import fixed — already done in Phase 1.
-- [ ] `client.py` — **not created**. `DominionSC` stays in `dominionsc.py`.
-      Deferred: no test currently forces this move, and moving it risks
-      breaking `from dominionsc.dominionsc import DominionSC` imports for no
-      immediate benefit given time constraints on this pass.
+- [x] `client.py` created. `DominionSC` moved there in full.
+      `dominionsc.py` is now a 4-statement backward-compat shim
+      (`from .client import DominionSC`, `from .auth import DominionSCTFAHandler`,
+      `from .transport import DominionSCURLHandler`) so
+      `from dominionsc.dominionsc import ...` keeps resolving unchanged.
 
-**Verified:** 58/58 tests, zero edits. `dominionsc.py` 223→106 statements,
-now 100% covered (was 99%). `auth.py` new, 99% covered. `ruff check .` clean.
+**Verified:** 58/58 tests, zero edits, across both the `auth.py` extraction
+and the subsequent `client.py` move. `dominionsc.py`: 223 statements (start of
+Phase 2) → 106 (after auth.py) → 4 (after client.py), 100% covered throughout.
+`client.py` new at 100% coverage. `ruff check .` clean. `dominionsc.__all__`
+unchanged from baseline; `python -m dominionsc --help` re-confirmed working
+after the client.py move specifically (this is exactly the kind of change
+unit tests wouldn't catch if the shim's re-exports were wrong).
 
 **Acceptance:**
 
