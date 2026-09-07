@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:espi="http://naesb.org/espi">
+  <!-- REDACTED FIXTURE: account/customer IDs replaced with REDACTED -->
+  <!-- Two UsagePoint entries representing a net-metered solar account:
+       UsagePoint REDACTED-UP1 = grid delivery (positive values, register :1)
+       UsagePoint REDACTED-UP3 = solar export (negative values, register :3)
+       Timestamps: 2026-08-13 midnight EDT = 1786579200 UTC
+       Duration: 900s (15-minute intervals)
+       Known limitation: parse_usage_reads currently flattens both entries
+       into one list with overlapping timestamps. See multi-register issue. -->
+
+  <!-- UsagePoint 1: grid delivery (register :1) -->
+  <entry>
+    <id>urn:uuid:REDACTED-1</id>
+    <link href="https://naapi2.bidgely.com/Customer/REDACTED/UsagePoint/REDACTED-UP1/MeterReading/REDACTED-MR1/IntervalBlock/REDACTED-IB1" rel="self" type="espi-entry/IntervalBlock"/>
+    <link href="https://naapi2.bidgely.com/Customer/REDACTED/UsagePoint/REDACTED-UP1/MeterReading/REDACTED-MR1/IntervalBlock" rel="up" type="espi-feed/IntervalBlock"/>
+    <title>Interval Consumption. Start: 2026-08-13 00:00:00</title>
+    <content>
+      <espi:IntervalBlock>
+        <espi:interval>
+          <espi:duration>86400</espi:duration>
+          <espi:start>1786579200</espi:start>
+        </espi:interval>
+        <espi:IntervalReading>
+          <espi:ReadingQuality><espi:quality>17</espi:quality></espi:ReadingQuality>
+          <espi:timePeriod>
+            <espi:duration>900</espi:duration>
+            <espi:start>1786579200</espi:start>
+          </espi:timePeriod>
+          <espi:value>209</espi:value>
+        </espi:IntervalReading>
+        <espi:IntervalReading>
+          <espi:ReadingQuality><espi:quality>17</espi:quality></espi:ReadingQuality>
+          <espi:timePeriod>
+            <espi:duration>900</espi:duration>
+            <espi:start>1786580100</espi:start>
+          </espi:timePeriod>
+          <espi:value>328</espi:value>
+        </espi:IntervalReading>
+      </espi:IntervalBlock>
+    </content>
+  </entry>
+
+  <!-- Non-interval entry: should be skipped by the parser -->
+  <entry>
+    <id>urn:uuid:REDACTED-META</id>
+    <title>ReadingType for UsagePoint REDACTED-UP1</title>
+    <content>
+      <espi:ReadingType>
+        <espi:flowDirection>1</espi:flowDirection>
+        <espi:commodity>1</espi:commodity>
+        <espi:intervalLength>900</espi:intervalLength>
+        <espi:uom>72</espi:uom>
+      </espi:ReadingType>
+    </content>
+  </entry>
+
+  <!-- UsagePoint 3: solar export (register :3, negative values) -->
+  <entry>
+    <id>urn:uuid:REDACTED-3</id>
+    <link href="https://naapi2.bidgely.com/Customer/REDACTED/UsagePoint/REDACTED-UP3/MeterReading/REDACTED-MR3/IntervalBlock/REDACTED-IB3" rel="self" type="espi-entry/IntervalBlock"/>
+    <link href="https://naapi2.bidgely.com/Customer/REDACTED/UsagePoint/REDACTED-UP3/MeterReading/REDACTED-MR3/IntervalBlock" rel="up" type="espi-feed/IntervalBlock"/>
+    <title>Interval Consumption. Start: 2026-08-13 00:00:00</title>
+    <content>
+      <espi:IntervalBlock>
+        <espi:interval>
+          <espi:duration>86400</espi:duration>
+          <espi:start>1786579200</espi:start>
+        </espi:interval>
+        <espi:IntervalReading>
+          <espi:ReadingQuality><espi:quality>17</espi:quality></espi:ReadingQuality>
+          <espi:timePeriod>
+            <espi:duration>900</espi:duration>
+            <espi:start>1786579200</espi:start>
+          </espi:timePeriod>
+          <espi:value>0</espi:value>
+        </espi:IntervalReading>
+        <espi:IntervalReading>
+          <espi:ReadingQuality><espi:quality>17</espi:quality></espi:ReadingQuality>
+          <espi:timePeriod>
+            <espi:duration>900</espi:duration>
+            <espi:start>1786580100</espi:start>
+          </espi:timePeriod>
+          <espi:value>-128</espi:value>
+        </espi:IntervalReading>
+      </espi:IntervalBlock>
+    </content>
+  </entry>
+</feed>

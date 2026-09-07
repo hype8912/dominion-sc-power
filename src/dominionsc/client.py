@@ -9,11 +9,10 @@ strings, or pilot-ID/timezone literals. See docs/REFACTOR_PLAN.md Phase 2.
 import json
 import logging
 import zoneinfo
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import aiohttp
-import xmltodict
 from aiohttp.client_exceptions import ClientError
 
 from . import headers as _headers
@@ -22,6 +21,8 @@ from .auth import LoginFlow, find_verification_token
 from .config import UtilityConfig
 from .exceptions import ApiException, CannotConnect, InvalidAuth
 from .forecast import Forecast
+from .parsers.forecast import parse_forecast
+from .parsers.greenbutton import parse_usage_reads
 from .transport import DominionSCURLHandler
 from .usage_read import UsageRead
 
@@ -164,29 +165,17 @@ class DominionSC:
         r1 = await url_handler.call_api("get", url1, ajax_headers)
         try:
             r1_json = json.loads(r1)
-            start_date = datetime.fromisoformat(r1_json["data"]["amiUsageAlert"]["currentBillUsageStartDate"]).date()
-            end_date = datetime.fromisoformat(r1_json["data"]["amiUsageAlert"]["currentBillUsageEndDate"]).date()
-            current_date = datetime.fromisoformat(r1_json["data"]["amiUsageAlert"]["currentBillThroughDate"]).date()
-            cost_to_date = r1_json["data"]["amiUsageAlert"]["totalCostUnbilledConsumption"]
-            forecasted_cost = round(
-                r1_json["data"]["amiUsageAlert"]["currentCostPerDay"]
-                * r1_json["data"]["amiUsageAlert"]["numberOfDaysInCurrentBill"],
-                2,
-            )
-            if r1_json["data"]["amiUsageAlert"]["lastYearAmountExists"]:
-                typical_cost = r1_json["data"]["amiUsageAlert"]["lastYearTotalAmount"]
-            else:
-                typical_cost = None
         except Exception as err:
             raise ApiException("Failed to decode forecast data.", url=url1, response_text=r1) from err
 
+        forecast = parse_forecast(r1_json, url=url1)
         return {
-            "start_date": start_date,
-            "end_date": end_date,
-            "current_date": current_date,
-            "cost_to_date": cost_to_date,
-            "forecasted_cost": forecasted_cost,
-            "typical_cost": typical_cost,
+            "start_date": forecast.start_date,
+            "end_date": forecast.end_date,
+            "current_date": forecast.current_date,
+            "cost_to_date": forecast.cost_to_date,
+            "forecasted_cost": forecast.forecasted_cost,
+            "typical_cost": forecast.typical_cost,
         }
 
     async def async_get_usage_reads(
@@ -200,8 +189,6 @@ class DominionSC:
         :raises CannotConnect: if there is a retryable connection exception
         :raises ApiException: if API response cannot be parsed (API structure may have changed)
         """
-        result: list[UsageRead] = []
-
         # Floor the dates to midnight in the utility's local timezone (see
         # docs/REFACTOR_PLAN.md / git history: this used to be mislabeled
         # as UTC, which silently shifted the requested window).
@@ -211,33 +198,7 @@ class DominionSC:
         end_date_timestamp = int(end_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
         url = _urls.gb_download_url(self._config, self.user_id, start_time_timestamp, end_date_timestamp, account)
         r = await self._async_get_request(url, self._get_headers())
-        try:
-            energy_usage = xmltodict.parse(r)
-
-            for entry in energy_usage["feed"]["entry"]:
-                if not entry["title"].startswith("Interval Consumption"):
-                    continue
-
-                intervals = entry["content"]["espi:IntervalBlock"]["espi:IntervalReading"]
-                for interval in intervals:
-                    time_start = int(interval["espi:timePeriod"]["espi:start"])
-                    duration = int(
-                        interval["espi:timePeriod"]["espi:duration"]
-                    )  # 900 sec (15 min) (electric) or 3600 (1hr) (gas)
-                    time_end = time_start + duration - 1
-                    consumption = int(interval["espi:value"])  # in Wh (electric) or ft^3 (gas)
-                    result.append(
-                        UsageRead(
-                            start_time=datetime.fromtimestamp(time_start, UTC).replace(
-                                tzinfo=zoneinfo.ZoneInfo(self.timezone)
-                            ),
-                            end_time=datetime.fromtimestamp(time_end, UTC).replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)),
-                            consumption=consumption,
-                        )
-                    )
-            return result
-        except Exception as err:
-            raise ApiException("Unable to parse XML in async_get_usage_reads.", url=url, response_text=r) from err
+        return parse_usage_reads(r, self.timezone, url=url)
 
     def _get_headers(self) -> dict[str, str]:
         return _headers.bidgely_headers(self._config, access_token=self.access_token)
