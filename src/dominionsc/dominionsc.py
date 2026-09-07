@@ -1,43 +1,23 @@
 """Implementation of dominionenergysc.com API."""
 
-import dataclasses
 import json
 import logging
 import re
 import time
 import zoneinfo
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import aiohttp
 import xmltodict
 from aiohttp.client_exceptions import ClientError
 
-from .const import USER_AGENT
+from .const import BIDGELY_PILOT_ID, USER_AGENT
 from .exceptions import ApiException, CannotConnect, InvalidAuth, MfaChallenge
+from .forecast import Forecast
+from .usage_read import UsageRead
 
 _LOGGER = logging.getLogger(__file__)
-
-
-@dataclasses.dataclass
-class UsageRead:
-    """A read from the meter that has consumption data."""
-
-    start_time: datetime
-    end_time: datetime
-    consumption: float  # units: Wh or Ft^3
-
-
-@dataclasses.dataclass
-class Forecast:
-    """Forecast data for an account. Includes both electric and gas (where applicable)."""
-
-    start_date: date
-    end_date: date
-    current_date: date
-    cost_to_date: float
-    forecasted_cost: float
-    typical_cost: float
 
 
 class DominionSCURLHandler:
@@ -330,7 +310,7 @@ class DominionSC:
             "Origin": "https://account.dominionenergysc.com",
             "Referer": "https://account.dominionenergysc.com/",
             "X-Bidgely-Client-Type": "WIDGETS",
-            "X-Bidgely-Pilot-Id": "10106",
+            "X-Bidgely-Pilot-Id": BIDGELY_PILOT_ID,
         }
 
         body2 = {"clientId": "prod_desc_widget", "encryptedData": encryptedToken}
@@ -457,8 +437,13 @@ class DominionSC:
         # Floor the dates to midnight UTC (how the API accepts data)
         start_date = datetime.combine(start_date, datetime.min.time())
         end_date = datetime.combine(end_date, datetime.min.time())
-        start_time_timestamp = int(start_date.replace(tzinfo=zoneinfo.ZoneInfo("UTC")).timestamp())
-        end_date_timestamp = int(end_date.replace(tzinfo=zoneinfo.ZoneInfo("UTC")).timestamp())
+        # BUGFIX: the requested start/end dates represent midnight in the utility's
+        # own timezone (self.timezone), not UTC. Labeling naive midnight as UTC shifts
+        # the request window by the local UTC offset (4-5 hours for America/New_York),
+        # which can cause Bidgely to return a different/estimated response instead of
+        # the true interval data for the calendar days actually requested.
+        start_time_timestamp = int(start_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
+        end_date_timestamp = int(end_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
         url = (
             self.bidgely_endpoint + f"/v2.0/dashboard/users/{self.user_id}/gb-download"
             f"?start={start_time_timestamp}&end={end_date_timestamp}"
@@ -502,7 +487,7 @@ class DominionSC:
             "Origin": "https://account.dominionenergysc.com",
             "Referer": "https://account.dominionenergysc.com/",
             "X-Bidgely-Client-Type": "WIDGETS",
-            "X-Bidgely-Pilot-Id": "10106",
+            "X-Bidgely-Pilot-Id": BIDGELY_PILOT_ID,
         }
         if self.access_token:
             headers["Authorization"] = f"Bearer {self.access_token}"

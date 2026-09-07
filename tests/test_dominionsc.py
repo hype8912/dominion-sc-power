@@ -8,9 +8,11 @@ import aiohttp
 import pytest
 from aiohttp.client_exceptions import ClientError, ClientResponseError
 
-from dominionsc.const import USER_AGENT
-from dominionsc.dominionsc import DominionSC, DominionSCTFAHandler, DominionSCURLHandler, Forecast, UsageRead
+from dominionsc.const import BIDGELY_PILOT_ID, USER_AGENT
+from dominionsc.dominionsc import DominionSC, DominionSCTFAHandler, DominionSCURLHandler
 from dominionsc.exceptions import ApiException, CannotConnect, InvalidAuth, MfaChallenge
+from dominionsc.forecast import Forecast
+from dominionsc.usage_read import UsageRead
 
 
 @pytest.fixture
@@ -927,7 +929,7 @@ class TestDominionSC:
         assert headers["Origin"] == "https://account.dominionenergysc.com"
         assert headers["Referer"] == "https://account.dominionenergysc.com/"
         assert headers["X-Bidgely-Client-Type"] == "WIDGETS"
-        assert headers["X-Bidgely-Pilot-Id"] == "10106"
+        assert headers["X-Bidgely-Pilot-Id"] == BIDGELY_PILOT_ID
         assert headers["Authorization"] == "Bearer test_token_123"
 
     def test_get_headers_without_token(self, dominion_client):

@@ -88,34 +88,34 @@ import aiohttp
 from dominionsc import DominionSC, create_cookie_jar
 from datetime import datetime, timedelta
 
+
 async def main():
     username = "your_username"
     password = "your_password"
-    
+
     async with aiohttp.ClientSession(cookie_jar=create_cookie_jar()) as session:
         client = DominionSC(session, username, password)
-        
+
         # Login
         await client.async_login()
-        
+
         # ** Handle TFA (see below) **
-        
+
         # Get forecast
         forecast = await client.async_get_forecast()
         print(f"Forecasted cost: ${forecast.forecasted_cost}")
-        
+
         # Get usage data
         accounts = await client.async_get_accounts()
         for account in accounts[0]:
             # accounts[1] is the service address
             # each account is in ['ELECTRIC' or 'GAS']
             usage = await client.async_get_usage_reads(
-                account,
-                start_date=datetime.now() - timedelta(days=7),
-                end_date=datetime.now()
+                account, start_date=datetime.now() - timedelta(days=7), end_date=datetime.now()
             )
             for reading in usage:
                 print(f"{reading.start_time}: {reading.consumption} Wh")
+
 
 asyncio.run(main())
 ```
