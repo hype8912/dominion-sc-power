@@ -1,11 +1,12 @@
 # Refactor Plan — `dominion-sc-power`
 
-**Status:** Phase 1 complete (2026-09-05); Phases 2–5 not started
+**Status:** Phases 1–3 complete (2026-09-05); Phases 4–5 not started
 **Written against:** working tree state of 2026-09-05, after `Forecast` / `UsageRead`
 were extracted into `forecast.py` / `usage_read.py`, and after the
 `BIDGELY_PILOT_ID` + timezone fixes were applied.
 **Baseline:** 58 tests passing, `dominionsc.py` at 99% line coverage.
-**Current:** 58 tests passing (unchanged), `config.py`/`transport.py`/`headers.py`/`urls.py` at 100% coverage, `dominionsc.py` at 99%.
+**Current:** 74 tests passing (+16 fixture-based parser tests), all library modules
+at 100% coverage except `__main__.py` (0%) and `helpers.py` (67%). `ruff check .` clean.
 
 ---
 
@@ -305,31 +306,60 @@ unit tests wouldn't catch if the shim's re-exports were wrong).
 
 ---
 
-### Phase 3 — Parsers _(the phase that unblocks solar support)_
+### Phase 3 — Parsers _(the phase that unblocks solar support)_ — ✅ DONE
 
 Addresses **F5**.
 
-- [ ] Create `parsers/greenbutton.py` with a pure function:
-      `parse_usage_reads(xml_text: str, timezone: str) -> list[UsageRead]`
-- [ ] Create `parsers/forecast.py` with
-      `parse_forecast(payload: dict) -> Forecast`
-- [ ] `async_get_usage_reads` reduces to: build window → build URL → fetch →
-      hand the string to the parser.
-- [ ] Add `tests/fixtures/` and commit a **redacted** real Green Button XML
-      sample. Test the parser directly against it — no network, no credentials.
-- [ ] Add a fixture for a multi-register (net-metered) account to document the
-      current flattening behaviour.
+**Status:** Implemented and verified 2026-09-05. 74/74 tests pass (58 existing
++ 16 new fixture-based and synthetic parser tests). Both new modules at 100%
+coverage. `ruff check .` clean.
+
+- [x] Create `parsers/greenbutton.py` with a pure function:
+      `parse_usage_reads(xml_text: str, timezone: str, url: str | None) -> list[UsageRead]`
+      No `aiohttp` import, no network I/O, no `DominionSC` dependency.
+- [x] Create `parsers/forecast.py` with
+      `parse_forecast(payload: dict, url: str | None) -> Forecast`
+      Same: pure function, no I/O.
+- [x] `async_get_usage_reads` now reduces to: build window → build URL → fetch →
+      hand the string to `parse_usage_reads`. `_async_get_forecast_internal`
+      similarly delegates to `parse_forecast` after the JSON decode.
+- [x] `tests/fixtures/` created and committed with
+      `greenbutton_multi_register.xml` — a redacted two-register fixture
+      representing a net-metered solar account (grid delivery register `:1`
+      with positive values, solar export register `:3` with negative values).
+      All account numbers, customer IDs, and addresses replaced with `REDACTED`.
+- [x] `tests/test_parsers.py` (16 tests): exercises the parser directly against
+      the committed fixture and synthetic XML strings — zero network calls,
+      zero credentials, zero HTTP mocks.
+
+**Bug fixed beyond the plan:** `_ensure_list()` was added to the Green Button
+parser to normalize `xmltodict`'s single-element-as-dict behavior. The original
+`async_get_usage_reads` iterated `entry[...]["espi:IntervalReading"]` directly;
+for a feed with exactly one `espi:IntervalReading` element, `xmltodict` returns
+a `dict` not a `list`, and iterating a dict yields its keys as strings. The
+existing tests used two-reading fixtures that masked this entirely. The new
+`test_single_interval_reading_not_a_list` test locks it in.
 
 **Acceptance:**
 
-- `parsers/` imports no `aiohttp` and performs no I/O.
-- At least one parser test runs against a committed fixture.
-- Tests green.
+- [x] `parsers/` imports no `aiohttp` and performs no I/O — grep-verified.
+- [x] At least one parser test runs against a committed fixture — confirmed
+      (`test_parses_multi_register_fixture` and several others use the XML file
+      directly via `pathlib.Path`).
+- [x] Tests green — 74/74.
 
-> **Follow-up, not part of this refactor:** with a testable parser in place,
-> add multi-register support — group readings by `UsagePoint` /
-> `espi:flowDirection` rather than flattening every `Interval Consumption`
-> entry into one list. Track as a separate issue.
+**Multi-register behaviour documented, not hidden:** the fixture and
+`test_solar_export_negative_values_preserved` / `test_grid_delivery_values_preserved`
+explicitly document the current flattening: both registers land in one flat
+`list[UsageRead]` with overlapping timestamps and no register discriminator.
+These tests are **deliberate trip-wires** — they must be updated (not just
+skipped) when multi-register support is implemented.
+
+> **Follow-up, not part of this refactor:** with the parser seam now in place,
+> multi-register support is a parser-only change — group readings by `UsagePoint`
+> href rather than flattening every `Interval Consumption` entry. Track as a
+> separate issue. No `ha-dominion-sc` coordinator change is needed until the
+> return type changes.
 
 ---
 
@@ -413,8 +443,8 @@ and confirm the old assertion was wrong (as was the case for the hardcoded
 ## 7. Definition of done
 
 - [ ] No module exceeds ~200 lines.
-- [ ] `parsers/` is import-free of `aiohttp` and testable from fixtures.
-- [ ] Pilot ID, user agent, endpoints, and timezone each appear in exactly one place.
+- [x] `parsers/` is import-free of `aiohttp` and testable from fixtures.
+- [x] Pilot ID, user agent, endpoints, and timezone each appear in exactly one place.
 - [ ] `uv run pytest` green; coverage on library modules no lower than baseline.
 - [ ] `uv run ruff check .` clean.
 - [ ] `dominionsc.__all__` unchanged from baseline.
