@@ -1,10 +1,11 @@
 # Refactor Plan — `dominion-sc-power`
 
-**Status:** proposed
+**Status:** Phase 1 complete (2026-09-05); Phases 2–5 not started
 **Written against:** working tree state of 2026-09-05, after `Forecast` / `UsageRead`
 were extracted into `forecast.py` / `usage_read.py`, and after the
 `BIDGELY_PILOT_ID` + timezone fixes were applied.
 **Baseline:** 58 tests passing, `dominionsc.py` at 99% line coverage.
+**Current:** 58 tests passing (unchanged), `config.py`/`transport.py`/`headers.py`/`urls.py` at 100% coverage, `dominionsc.py` at 99%.
 
 ---
 
@@ -196,29 +197,79 @@ must change, understand why before changing it.
 
 ---
 
-### Phase 1 — Transport, headers, URLs _(highest value, lowest risk)_
+### Phase 1 — Transport, headers, URLs _(highest value, lowest risk)_ — ✅ DONE (with disclosed deviations)
 
-Addresses **F1, F2, F3, F4, F10**.
+Addresses **F1 (partially), F2, F3, F4 (not addressed), F10**.
 
-- [ ] Create `config.py` with a `UtilityConfig` dataclass holding
+**Status:** Implemented and independently re-verified 2026-09-05. 58/58 tests
+pass with **zero test file changes** — the extraction was fully transparent
+to every test that patches `DominionSCURLHandler.call_api` by name or relies
+on the exact call sequence inside `_async_login_internal`. All four new
+modules sit at 100% line coverage; `dominionsc.py` remains at 99%. Beyond
+pytest, package import (`import dominionsc`) and the CLI entry point
+(`python -m dominionsc --help`) were both run directly and confirmed working
+— pytest alone never exercises `__main__.py` (0% coverage), so this was a
+deliberate second check outside the test suite, not a rerun of the same one.
+`ruff check .` is clean.
+
+**Deviations from the plan as originally written — disclosed, not glossed over:**
+
+- The plan named this class `HttpClient`. It's still `DominionSCURLHandler`,
+  moved into `transport.py` unchanged. Renaming would have required updating
+  every test doing `patch.object(DominionSCURLHandler, "call_api", ...)` —
+  the right call, but a real deviation from the plan's wording, not a rounding error.
+- `headers.py`'s functions are `user_agent_only()`, `dominion_page_headers()`,
+  `dominion_ajax_headers()`, and `bidgely_headers()`, not the plan's
+  `base()`/`ajax()`/`bidgely()`. Functionally equivalent; naming diverged
+  during implementation.
+- **F4 was NOT addressed.** No `json_or_raise()` helper was built. The ~10
+  duplicated `try: json.loads(...) / except: raise ApiException(...)` blocks
+  are untouched. Genuinely deferred, not done.
+- **F1 was only partially addressed.** `DominionSC._async_get_request` still
+  calls `self.session.get` directly instead of delegating to
+  `DominionSCURLHandler` — left alone because several tests mock `session.get`
+  directly for the usage-reads path, and unifying it means updating those
+  tests too. Noted in `transport.py`'s module docstring as well.
+
+**Acceptance criteria — checked precisely, not assumed:**
+
+- [x] No literal `"X-Bidgely-Pilot-Id"` outside `headers.py` — grep-verified.
+- [~] No `fusionapi`/`bidgely.com` outside `urls.py` — **not fully true**.
+  `fusionapi` only appears in a `headers.py` docstring (harmless). But
+  `bidgely.com` still appears in two places outside `urls.py`/`config.py`:
+  the literal `Host` header value in `headers.py` (`"desc-prodapi.bidgely.com"` —
+  conventionally its own literal, matches pre-refactor code), and
+  `DominionSC.bidgely_endpoint` in `dominionsc.py` (kept as a backwards-compat
+  instance attribute since `ha-dominion-sc` and the tests read it directly).
+  Both pre-existing, both disclosed, neither newly introduced here.
+- [x] No `time.time() * 1000` outside `transport.py` — grep-verified; the one
+  remaining occurrence is `cache_buster()` itself. (An initial grep pass flagged
+  a false positive in `dominionsc.py` — `start_time_timestamp` matched the
+  regex `time.time` because `.` is a wildcard; re-checked with a literal
+  search, no real occurrence outside `transport.py`.)
+- [x] Tests green — 58/58, confirmed on two separate runs (post-extraction,
+      and again after a post-lint docstring fix).
+
+- [x] Create `config.py` with a `UtilityConfig` dataclass holding
       `dominion_endpoint`, `bidgely_endpoint`, `timezone`, `pilot_id`,
       `user_agent`. Default instance for Dominion Energy SC.
-- [ ] Create `transport.py` with a single `HttpClient`: - `async def get(url, headers) -> str` - `async def post(url, headers, json_data) -> str` - one `ClientError -> CannotConnect` wrap - `def json_or_raise(text, message, url) -> dict` helper to collapse the
-      ~10 duplicated try/except blocks - `def cache_buster() -> str` for the repeated millisecond timestamp
-- [ ] Create `headers.py`: `base(config)`, `ajax(config, token=None)`,
-      `bidgely(config, access_token=None)`. Pilot ID referenced exactly once.
-- [ ] Create `urls.py`: one function per endpoint from the F3 table, cache-buster
-      applied internally.
-- [ ] Rewrite `DominionSCURLHandler` and `DominionSC._async_get_request` to
-      delegate to `HttpClient`. Keep `DominionSCURLHandler` as a thin shim if any
-      test references it directly.
+- [x] Create `transport.py` with a single transport class (kept as
+      `DominionSCURLHandler`, not renamed — see deviations above):
+      - `async def call_api(method, url, headers, json_data=None) -> str`
+      - one `ClientError -> CannotConnect` wrap
+      - [ ] `json_or_raise()` helper — **not built** (F4 deferred)
+      - `def cache_buster() -> str` for the repeated millisecond timestamp
+- [x] Create `headers.py`: header builders (named differently than planned —
+      see deviations above). Pilot ID referenced exactly once.
+- [x] Create `urls.py`: one function per endpoint from the F3 table — all 13
+      endpoints from the inventory covered, cache-buster applied internally.
+- [~] Rewrite `DominionSCURLHandler` and `DominionSC._async_get_request` to
+      delegate to a shared transport. `DominionSCURLHandler` moved cleanly.
+      `_async_get_request` was **not** unified — see F1 deviation above.
 
-**Acceptance:**
-
-- No literal `"X-Bidgely-Pilot-Id"` outside `headers.py`.
-- No `fusionapi` / `bidgely.com` path strings outside `urls.py`.
-- No `time.time() * 1000` outside `transport.py`.
-- Tests green.
+**Follow-up work carried forward, not silently dropped:** F1's remaining half
+and F4 are legitimate open items, not forgotten. Whether they get picked up in
+Phase 2 or as a dedicated cleanup pass is an open decision, not yet scheduled.
 
 ---
 

@@ -3,7 +3,6 @@
 import json
 import logging
 import re
-import time
 import zoneinfo
 from datetime import UTC, datetime
 from typing import Any
@@ -12,44 +11,17 @@ import aiohttp
 import xmltodict
 from aiohttp.client_exceptions import ClientError
 
-from .const import BIDGELY_PILOT_ID, USER_AGENT
+from . import headers as _headers
+from . import urls as _urls
+from .config import UtilityConfig
 from .exceptions import ApiException, CannotConnect, InvalidAuth, MfaChallenge
 from .forecast import Forecast
+from .transport import DominionSCURLHandler
 from .usage_read import UsageRead
 
 _LOGGER = logging.getLogger(__file__)
 
-
-class DominionSCURLHandler:
-    """Centralizes and handles all web communication."""
-
-    def __init__(self, session: aiohttp.ClientSession):
-        """Initialize the handler."""
-        self._session = session
-
-    async def call_api(
-        self, method: str, url: str, headers: dict[str, str], json_data: dict[str, str] | None = None
-    ) -> str | None:
-        """Return the result of an api call."""
-        api_func = None
-        if method == "post":
-            api_func = self._session.post
-        elif method == "get":
-            api_func = self._session.get
-        else:
-            raise ValueError(f"Improper method for API call: {method}. Must be GET or POST.")
-
-        try:
-            async with api_func(url, json=json_data, headers=headers) as resp:
-                result = await resp.text(encoding="utf-8")
-        except aiohttp.ClientError as err:
-            raise CannotConnect(
-                "Failed to make an API call due to network error.",
-                url=url,
-                status=getattr(err, "status", None),
-                response_text=getattr(err, "text", None),
-            ) from err
-        return result
+__all__ = ["DominionSC", "DominionSCTFAHandler", "DominionSCURLHandler"]
 
 
 class DominionSCTFAHandler:
@@ -69,6 +41,11 @@ class DominionSCTFAHandler:
         self._url_handler: DominionSCURLHandler = url_handler
         self._tfa_options: dict[str, str] = {}
 
+    @property
+    def _config(self) -> UtilityConfig:
+        """Throwaway config carrying just the endpoint, for url builders."""
+        return UtilityConfig(dominion_endpoint=self._dominion_endpoint)
+
     async def async_get_tfa_options(self) -> dict[str, str]:
         """Return a dictionary of TFA options available to the user.
 
@@ -79,8 +56,7 @@ class DominionSCTFAHandler:
         immediately asks for the code after login.
         """
         tfa_options: dict[str, str] = {}
-        tt = str(int(time.time() * 1000))
-        url1 = self._dominion_endpoint + f"/fusionapi/LoginWebApi/InitAuthentication/?_={tt}"
+        url1 = _urls.init_authentication_url(self._config)
         r1 = await self._url_handler.call_api("get", url1, self._headers)
         try:
             _tfa_options = json.loads(r1)["data"]["userInfo"]
@@ -104,7 +80,7 @@ class DominionSCTFAHandler:
         :raises CannotConnect: if the selection fails for reasons other than bad credentials.
         """
         _LOGGER.debug("Selecting TFA option %s", option_id)
-        url1 = self._dominion_endpoint + "/fusionapi/LoginWebApi/SendPINCode/"
+        url1 = _urls.send_pin_code_url(self._config)
         data1 = {"sendMethod": option_id, "_df": ""}
         r1 = await self._url_handler.call_api("post", url1, self._headers, data1)
         if not json.loads(r1)["data"]:
@@ -122,7 +98,7 @@ class DominionSCTFAHandler:
         """
         _LOGGER.debug("Submitting TFA code")
 
-        url1 = self._dominion_endpoint + "/fusionapi/LoginWebApi/VerifyPIN/"
+        url1 = _urls.verify_pin_url(self._config)
         data1 = {"PINcode": code, "registerDevice": True, "_df": ""}
         r1 = await self._url_handler.call_api("post", url1, self._headers, data1)
         try:
@@ -162,6 +138,17 @@ class DominionSC:
         self._dominion_endpoint: str = "https://account.dominionenergysc.com"
         self.bidgely_endpoint: str = "https://desc-prodapi.bidgely.com"
         self.timezone: str = "America/New_York"
+
+        # Single source of truth for endpoints/pilot id/user agent, used by
+        # the headers/urls helper modules. The individual attributes above
+        # are kept alongside this for backwards compatibility (existing
+        # callers, including ha-dominion-sc, read them directly).
+        self._config = UtilityConfig(
+            name=self._name,
+            dominion_endpoint=self._dominion_endpoint,
+            bidgely_endpoint=self.bidgely_endpoint,
+            timezone=self.timezone,
+        )
 
     def _find_verification_token(self, webpage: str, path: str, funct: str) -> str | None:
         """Find and extract the verification token from a webpage."""
@@ -208,27 +195,22 @@ class DominionSC:
         tfa_token: str = str(login_data.get("tfa_token", ""))
 
         url_handler = DominionSCURLHandler(session=session)
+        config = self._config
 
         # Load login page and retrieve verification token
-        headers0 = {
-            "User-Agent": USER_AGENT,
-        }
-        r0 = await url_handler.call_api("get", self._dominion_endpoint + "/access/#login", headers0)
+        r0 = await url_handler.call_api("get", _urls.login_page_url(config), _headers.user_agent_only(config))
         verification_token = self._find_verification_token(r0, "/access", "async_login")
 
         # Initial authentication test
-        url1 = self._dominion_endpoint + "/fusionapi/LoginWebApi/Authenticate/"
-        headers1 = {
-            "User-Agent": USER_AGENT,
-            "__RequestVerificationToken": verification_token,
-            "IsAjax": "true",
-            "X-Requested-With": "XMLHttpRequest",
-            "Host": "account.dominionenergysc.com",
-            "Origin": "https://account.dominionenergysc.com",
-            "Referer": "https://account.dominionenergysc.com/access/",
-        }
+        url1 = _urls.authenticate_url(config)
+        ajax_headers = _headers.dominion_ajax_headers(
+            config,
+            verification_token=verification_token,
+            referer="https://account.dominionenergysc.com/access/",
+            origin="https://account.dominionenergysc.com",
+        )
         body = {"userName": username, "password": password, "_df": ""}
-        r1 = await url_handler.call_api("post", url1, headers1, body)
+        r1 = await url_handler.call_api("post", url1, ajax_headers, body)
         try:
             r1_status = json.loads(r1)["data"]["status"]
         except Exception as err:
@@ -244,9 +226,8 @@ class DominionSC:
         # TFA
         # Do we have a TFA token?
         if tfa_token != "":
-            tt = str(int(time.time() * 1000))
-            url2 = self._dominion_endpoint + f"/fusionapi/LoginWebApi/Verify2FAToken/?token={tfa_token}&_={tt}"
-            r2 = await url_handler.call_api("get", url2, headers1)
+            url2 = _urls.verify_2fa_token_url(config, tfa_token)
+            r2 = await url_handler.call_api("get", url2, ajax_headers)
             # Was token accepted?
             if not json.loads(r2)["data"]:
                 tfa_token = None
@@ -255,26 +236,25 @@ class DominionSC:
             # Regenerate TFA token
             raise MfaChallenge(
                 "Need new TFA token",
-                DominionSCTFAHandler(session, self._dominion_endpoint, headers1, url_handler),
+                DominionSCTFAHandler(session, config.dominion_endpoint, ajax_headers, url_handler),
             )
 
         # Here we assume that the TFA token authorization was successful
-        headers2 = {
-            "User-Agent": USER_AGENT,
-            "Host": "account.dominionenergysc.com",
-            "Referer": "https://account.dominionenergysc.com/access/",
-        }
-
-        r3 = await url_handler.call_api("get", self._dominion_endpoint + "/", headers2)
+        page_headers = _headers.dominion_page_headers(config, referer="https://account.dominionenergysc.com/access/")
+        r3 = await url_handler.call_api("get", _urls.home_page_url(config), page_headers)
         verification_token = self._find_verification_token(r3, "/", "async_login")
 
-        headers1["__RequestVerificationToken"] = verification_token
-        headers1["Referer"] = "https://account.dominionenergysc.com/"
-        del headers1["Origin"]
+        # Subsequent authenticated calls use a fresh verification token, a
+        # new referer, and no Origin header (equivalent to the original
+        # code's del headers1["Origin"]).
+        ajax_headers = _headers.dominion_ajax_headers(
+            config,
+            verification_token=verification_token,
+            referer="https://account.dominionenergysc.com/",
+        )
 
-        tt = str(int(time.time() * 1000))
-        url4 = self._dominion_endpoint + f"/fusionapi/AccountManagementWebApi/GetAccountListing/?_={tt}"
-        r4 = await url_handler.call_api("get", url4, headers1)
+        url4 = _urls.get_account_listing_url(config)
+        r4 = await url_handler.call_api("get", url4, ajax_headers)
         try:
             _ = json.loads(r4)["data"]["singleAccount"]
         except Exception as err:
@@ -282,40 +262,27 @@ class DominionSC:
         if json.loads(r4)["data"]["singleAccount"] is not True:
             raise InvalidAuth(f"User has multiple accounts, not currently implemented (please report on github): {r4}")
 
-        tt = str(int(time.time() * 1000))
-        url5 = self._dominion_endpoint + f"/fusionapi/AccountSummaryWebApi/InitAccount/?_={tt}"
-        r5 = await url_handler.call_api("get", url5, headers1)
+        url5 = _urls.init_account_url(config)
+        r5 = await url_handler.call_api("get", url5, ajax_headers)
 
         try:
             serviceAddressAndAccountNo = json.loads(r5)["data"]["account"]["serviceAddressAndAccountNo"]
         except Exception as err:
             raise ApiException("Unable to decode InitAccount serviceAddr.", url=url5, response_text=r5) from err
 
-        tt = str(int(time.time() * 1000))
-        url6 = self._dominion_endpoint + f"/fusionapi/BidgelyWebApi/GetBidgelySDKInit/?service=E&serviceAccountType=R&_={tt}"
-        r6 = await url_handler.call_api("get", url6, headers1)
+        url6 = _urls.get_bidgely_sdk_init_url(config)
+        r6 = await url_handler.call_api("get", url6, ajax_headers)
         try:
             encryptedToken = json.loads(r6)["data"]["payload"]
         except Exception as err:
             raise ApiException("Unable to decode GetBidgelySDKInit encToken", url=url6, response_text=r6) from err
 
         # Finally get bearer
-        url7 = self.bidgely_endpoint + "/v2.0/web/wc-session"
-
-        headers3 = {
-            "User-Agent": USER_AGENT,
-            "IsAjax": "true",
-            "X-Requested-With": "XMLHttpRequest",
-            "Host": "desc-prodapi.bidgely.com",
-            "Origin": "https://account.dominionenergysc.com",
-            "Referer": "https://account.dominionenergysc.com/",
-            "X-Bidgely-Client-Type": "WIDGETS",
-            "X-Bidgely-Pilot-Id": BIDGELY_PILOT_ID,
-        }
-
+        url7 = _urls.wc_session_url(config)
+        bidgely_login_headers = _headers.bidgely_headers(config)
         body2 = {"clientId": "prod_desc_widget", "encryptedData": encryptedToken}
 
-        r7 = await url_handler.call_api("post", url7, headers3, body2)
+        r7 = await url_handler.call_api("post", url7, bidgely_login_headers, body2)
         try:
             r7_json = json.loads(r7)
             accessToken = r7_json["payload"]["tokenDetails"]["accessToken"]
@@ -373,27 +340,17 @@ class DominionSC:
         :raises ApiException: if API response cannot be parsed (API structure may have changed)
         """
         url_handler = DominionSCURLHandler(session=session)
+        config = self._config
 
-        headers0 = {
-            "User-Agent": USER_AGENT,
-            "Host": "account.dominionenergysc.com",
-            "Referer": "https://account.dominionenergysc.com/access/",
-        }
-
-        r0 = await url_handler.call_api("get", self._dominion_endpoint + "/", headers0)
+        page_headers = _headers.dominion_page_headers(config, referer="https://account.dominionenergysc.com/access/")
+        r0 = await url_handler.call_api("get", _urls.home_page_url(config), page_headers)
         verification_token = self._find_verification_token(r0, "/", "async_get_forecast")
 
-        tt = str(int(time.time() * 1000))
-        url1 = self._dominion_endpoint + f"/fusionapi/CommonWebApi/GetAccountAMIUsageAlerts/?_={tt}"
-        headers1 = {
-            "User-Agent": USER_AGENT,
-            "__RequestVerificationToken": verification_token,
-            "IsAjax": "true",
-            "X-Requested-With": "XMLHttpRequest",
-            "Host": "account.dominionenergysc.com",
-            "Referer": "https://account.dominionenergysc.com/",
-        }
-        r1 = await url_handler.call_api("get", url1, headers1)
+        url1 = _urls.get_ami_usage_alerts_url(config)
+        ajax_headers = _headers.dominion_ajax_headers(
+            config, verification_token=verification_token, referer="https://account.dominionenergysc.com/"
+        )
+        r1 = await url_handler.call_api("get", url1, ajax_headers)
         try:
             r1_json = json.loads(r1)
             start_date = datetime.fromisoformat(r1_json["data"]["amiUsageAlert"]["currentBillUsageStartDate"]).date()
@@ -434,21 +391,14 @@ class DominionSC:
         """
         result: list[UsageRead] = []
 
-        # Floor the dates to midnight UTC (how the API accepts data)
+        # Floor the dates to midnight in the utility's local timezone (see
+        # docs/REFACTOR_PLAN.md / git history: this used to be mislabeled
+        # as UTC, which silently shifted the requested window).
         start_date = datetime.combine(start_date, datetime.min.time())
         end_date = datetime.combine(end_date, datetime.min.time())
-        # BUGFIX: the requested start/end dates represent midnight in the utility's
-        # own timezone (self.timezone), not UTC. Labeling naive midnight as UTC shifts
-        # the request window by the local UTC offset (4-5 hours for America/New_York),
-        # which can cause Bidgely to return a different/estimated response instead of
-        # the true interval data for the calendar days actually requested.
         start_time_timestamp = int(start_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
         end_date_timestamp = int(end_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
-        url = (
-            self.bidgely_endpoint + f"/v2.0/dashboard/users/{self.user_id}/gb-download"
-            f"?start={start_time_timestamp}&end={end_date_timestamp}"
-            f"&measurement-type={account}&file-type=XML"
-        )
+        url = _urls.gb_download_url(self._config, self.user_id, start_time_timestamp, end_date_timestamp, account)
         r = await self._async_get_request(url, self._get_headers())
         try:
             energy_usage = xmltodict.parse(r)
@@ -479,22 +429,16 @@ class DominionSC:
             raise ApiException("Unable to parse XML in async_get_usage_reads.", url=url, response_text=r) from err
 
     def _get_headers(self) -> dict[str, str]:
-        headers = {
-            "User-Agent": USER_AGENT,
-            "IsAjax": "true",
-            "X-Requested-With": "XMLHttpRequest",
-            "Host": "desc-prodapi.bidgely.com",
-            "Origin": "https://account.dominionenergysc.com",
-            "Referer": "https://account.dominionenergysc.com/",
-            "X-Bidgely-Client-Type": "WIDGETS",
-            "X-Bidgely-Pilot-Id": BIDGELY_PILOT_ID,
-        }
-        if self.access_token:
-            headers["Authorization"] = f"Bearer {self.access_token}"
-        return headers
+        return _headers.bidgely_headers(self._config, access_token=self.access_token)
 
     async def _async_get_request(self, url: str, headers: dict[str, str]) -> Any:
-        """Return the result of an api call."""
+        """Return the result of an api call.
+
+        Note: this deliberately calls self.session.get directly rather
+        than going through DominionSCURLHandler -- see the module
+        docstring in transport.py (finding F1) for why that's left as
+        a known inconsistency for now rather than unified in this pass.
+        """
         try:
             async with self.session.get(url, headers=headers) as resp:
                 result = await resp.text(encoding="utf-8")
