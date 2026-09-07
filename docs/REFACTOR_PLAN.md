@@ -273,23 +273,29 @@ Phase 2 or as a dedicated cleanup pass is an open decision, not yet scheduled.
 
 ---
 
-### Phase 2 — Authentication
+### Phase 2 — Authentication — ✅ CORE DONE (client.py rename deferred)
 
-Addresses **F7, F8**.
+Addresses **F7 (done in Phase 1), F8 (done)**.
 
-- [ ] Move `DominionSCTFAHandler` into `auth.py` unchanged in behaviour.
-- [ ] Move `_async_login_internal` into `auth.py` as `LoginFlow.execute()`.
-- [ ] Build fresh header dicts per step (via `headers.py`) instead of mutating
-      and re-passing `headers1`.
-- [ ] Fix the `.utility` TYPE_CHECKING import in `exceptions.py` to point at
-      `.auth`.
-- [ ] `client.py` gains `DominionSC`, delegating login to `LoginFlow`.
+- [x] Move `DominionSCTFAHandler` into `auth.py`, behavior unchanged.
+- [x] Move `_async_login_internal` into `auth.py` as `LoginFlow.execute()`.
+      `DominionSC._async_login_internal` kept as a one-line delegating wrapper
+      (backward compat — tests call it directly with the original signature).
+- [x] Fresh header dicts per step, no mutation — was already true after Phase 1.
+- [x] `.utility` TYPE_CHECKING import fixed — already done in Phase 1.
+- [ ] `client.py` — **not created**. `DominionSC` stays in `dominionsc.py`.
+      Deferred: no test currently forces this move, and moving it risks
+      breaking `from dominionsc.dominionsc import DominionSC` imports for no
+      immediate benefit given time constraints on this pass.
+
+**Verified:** 58/58 tests, zero edits. `dominionsc.py` 223→106 statements,
+now 100% covered (was 99%). `auth.py` new, 99% covered. `ruff check .` clean.
 
 **Acceptance:**
 
-- `auth.py` has no `xmltodict` import and no usage/forecast logic.
-- No in-place mutation of a header dict that is passed elsewhere.
-- Tests green (login tests may need import-path updates only).
+- [x] `auth.py` has no `xmltodict` import and no usage/forecast logic.
+- [x] No in-place mutation of a header dict passed elsewhere.
+- [x] Tests green, zero import-path updates needed (re-exported from `dominionsc.py`).
 
 ---
 
