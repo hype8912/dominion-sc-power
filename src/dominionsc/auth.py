@@ -25,7 +25,11 @@ def find_verification_token(webpage: str, path: str, funct: str) -> str | None:
     """Find and extract the verification token from a webpage."""
     try:
         token_search = re.findall(r'<input name="__RequestVerificationToken" type="hidden" value="(.*)" \/>', webpage)
+        if not token_search:
+            raise CannotConnect(f"Cannot retrieve request verification token (path={path}, funct={funct}).")
         return token_search[0].split('" />', 1)[0]
+    except CannotConnect:
+        raise
     except Exception as err:
         raise CannotConnect(f"Cannot retrieve request verification token (path={path}, funct={funct}).") from err
 

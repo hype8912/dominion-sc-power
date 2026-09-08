@@ -56,6 +56,13 @@ class TestBuildParser:
         args = parser.parse_args(["--end_date", "2026-09-10"])
         assert args.end_date == datetime(2026, 9, 10)
 
+    def test_start_date_defaults_none(self):
+        """When omitted, start_date/end_date are None at parse time (bound in run())."""
+        parser = build_parser()
+        args = parser.parse_args([])
+        assert args.start_date is None
+        assert args.end_date is None
+
     def test_verbose_default_is_zero(self):
         """Verbosity defaults to 0."""
         parser = build_parser()
@@ -273,6 +280,61 @@ class TestRunCSV:
         assert set(by_register) == {"GRID_UP", "SOLAR_UP"}
         assert by_register["GRID_UP"][4] == "209"
         assert by_register["SOLAR_UP"][4] == "-128"  # solar export sign preserved
+
+    @pytest.mark.asyncio
+    async def test_run_skips_default_when_dates_provided(self, tmp_path):
+        """Cover false branches: when dates are provided, lines 129/131 skip binding."""
+        out = tmp_path / "out.csv"
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "--username", "u",
+                "--password", "p",
+                "--csv", str(out),
+                "--start_date", "2026-09-01",
+                "--end_date", "2026-09-08",
+            ]
+        )
+        assert args.start_date is not None
+        assert args.end_date is not None
+
+        with (
+            patch("dominionsc.cli.aiohttp.ClientSession") as mock_session_cls,
+            patch("dominionsc.cli.DominionSC", return_value=_mock_dominionsc()),
+        ):
+            mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await run(args)
+
+        assert result == 0
+
+    @pytest.mark.asyncio
+    async def test_run_binds_default_dates_when_none(self, tmp_path):
+        """Cover lines 129-134: run() binds datetime defaults when args are None."""
+        out = tmp_path / "out.csv"
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "--username", "u",
+                "--password", "p",
+                "--csv", str(out),
+            ]
+        )
+        assert args.start_date is None
+        assert args.end_date is None
+
+        with (
+            patch("dominionsc.cli.aiohttp.ClientSession") as mock_session_cls,
+            patch("dominionsc.cli.DominionSC", return_value=_mock_dominionsc()),
+        ):
+            mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await run(args)
+
+        assert result == 0
+        # After run(), defaults are bound to real datetime objects
+        assert args.start_date is not None
+        assert args.end_date is not None
 
     @pytest.mark.asyncio
     async def test_run_returns_zero_on_success(self, tmp_path):
@@ -556,6 +618,19 @@ class TestHandleMfa:
 
         assert result is False
         dominionsc.async_login.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_invalid_tfa_choice_returns_false(self):
+        """Cover cli.py 103-105: bad option index returns False."""
+        from dominionsc.cli import _handle_mfa
+        handler = _mfa_handler(options={"sms_1": "Text to ***1234"})
+        challenge = MfaChallenge("tfa needed", handler)
+        dominionsc = MagicMock()
+        dominionsc.async_login = AsyncMock()
+
+        with patch("dominionsc.cli.input", side_effect=["99", "000000"]):
+            result = await _handle_mfa(dominionsc, challenge, None)
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_saves_login_data_file_on_success(self, tmp_path):

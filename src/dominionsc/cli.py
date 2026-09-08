@@ -58,13 +58,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--start_date",
         help="Start datetime for historical data. Defaults to 7 days ago",
         type=lambda s: datetime.fromisoformat(s),
-        default=datetime.now() - timedelta(days=7),
+        default=None,
     )
     parser.add_argument(
         "--end_date",
         help="end datetime for historical data. Defaults to now",
         type=lambda s: datetime.fromisoformat(s),
-        default=datetime.now(),
+        default=None,
     )
     parser.add_argument(
         "--csv",
@@ -97,8 +97,12 @@ async def _handle_mfa(
         print("Please select an TFA option:")
         for i, (_, value) in enumerate(options.items()):
             print(f"  [{i + 1}] {value}")
-        choice_index = int(input("Enter the number for your choice: ")) - 1
-        choice_key = list(options.keys())[choice_index]
+        try:
+            choice_index = int(input("Enter the number for your choice: ")) - 1
+            choice_key = list(options.keys())[choice_index]
+        except (ValueError, IndexError):
+            print("Invalid selection.")
+            return False
         await handler.async_select_tfa_option(choice_key)
         print(f"A security code has been sent via {options[choice_key]}.")
 
@@ -125,6 +129,11 @@ async def run(args: argparse.Namespace) -> int:
     Separated from __main__ so it can be tested without subprocess.
     """
     logging.basicConfig(level=logging.DEBUG - args.verbose + 1 if args.verbose > 0 else logging.INFO)
+
+    if args.start_date is None:
+        args.start_date = datetime.now() - timedelta(days=7)
+    if args.end_date is None:
+        args.end_date = datetime.now()
 
     username = args.username or input("Username: ")
     password = args.password or getpass("Password: ")

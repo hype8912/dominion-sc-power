@@ -1110,6 +1110,12 @@ class TestDominionSC:
 
         assert token == "abc123"
 
+    def test_find_verification_token_bad_input_raises_generic(self):
+        """Cover lines 33-34: generic exception path in find_verification_token."""
+        from dominionsc.auth import find_verification_token
+        with pytest.raises(CannotConnect, match="Cannot retrieve"):
+            find_verification_token(None, "/t", "f")
+
     def test_find_verification_token_not_found(self, dominion_client):
         """Test verification token not found."""
         webpage = "<html><body>No token here</body></html>"
