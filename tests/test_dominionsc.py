@@ -656,6 +656,67 @@ class TestDominionSC:
         assert "GAS" in accounts[0]
 
     @pytest.mark.asyncio
+    async def test_async_login_internal_empty_measurement_mappings(self, dominion_client):
+        """An empty measurementToUserTypeMappings list yields no measurement types.
+
+        Exercises the loop-never-iterates branch: the login still succeeds and
+        returns an empty measurement-types list rather than erroring.
+        """
+        responses = [
+            '<input name="__RequestVerificationToken" type="hidden" value="token1" />',
+            '{"data": {"status": "twoFA"}}',
+            '{"data": true}',
+            '<input name="__RequestVerificationToken" type="hidden" value="token2" />',
+            '{"data": {"singleAccount": true}}',
+            '{"data": {"account": {"serviceAddressAndAccountNo": "ACC123"}}}',
+            '{"data": {"payload": "encrypted_token"}}',
+            '{"payload": {"tokenDetails": {"accessToken": "access123"}, "userProfileDetails": {"userId": "user456"}, "userTypeDetails": {"measurementToUserTypeMappings": []}}}',
+        ]
+
+        with patch.object(DominionSCURLHandler, "call_api", new=AsyncMock(side_effect=responses)):
+            access_token, user_id, accounts = await dominion_client._async_login_internal(
+                dominion_client.session,
+                "test_user",
+                "test_pass",
+                {"tfa_token": "valid_token"},
+            )
+
+        assert access_token == "access123"
+        assert user_id == "user456"
+        assert accounts[0] == []
+
+    @pytest.mark.asyncio
+    async def test_async_login_internal_skips_unknown_measurement_type(self, dominion_client):
+        """A measurement type that is neither ELECTRIC nor GAS is skipped.
+
+        Exercises the false branch of the ELECTRIC/GAS membership check: a
+        WATER mapping is present but must not appear in the returned types,
+        while ELECTRIC alongside it still does.
+        """
+        responses = [
+            '<input name="__RequestVerificationToken" type="hidden" value="token1" />',
+            '{"data": {"status": "twoFA"}}',
+            '{"data": true}',
+            '<input name="__RequestVerificationToken" type="hidden" value="token2" />',
+            '{"data": {"singleAccount": true}}',
+            '{"data": {"account": {"serviceAddressAndAccountNo": "ACC123"}}}',
+            '{"data": {"payload": "encrypted_token"}}',
+            '{"payload": {"tokenDetails": {"accessToken": "access123"}, "userProfileDetails": {"userId": "user456"}, "userTypeDetails": {"measurementToUserTypeMappings": [{"measurementType": "WATER"}, {"measurementType": "ELECTRIC"}]}}}',
+        ]
+
+        with patch.object(DominionSCURLHandler, "call_api", new=AsyncMock(side_effect=responses)):
+            access_token, user_id, accounts = await dominion_client._async_login_internal(
+                dominion_client.session,
+                "test_user",
+                "test_pass",
+                {"tfa_token": "valid_token"},
+            )
+
+        assert "ELECTRIC" in accounts[0]
+        assert "WATER" not in accounts[0]
+        assert accounts[0] == ["ELECTRIC"]
+
+    @pytest.mark.asyncio
     async def test_async_get_accounts(self, dominion_client):
         """Test getting accounts."""
         dominion_client.accounts = ["account1", "account2"]
@@ -744,6 +805,18 @@ class TestDominionSC:
         responses = [
             '<input name="__RequestVerificationToken" type="hidden" value="token1" />',
             '{"data": {}}',  # Missing amiUsageAlert
+        ]
+
+        with patch.object(DominionSCURLHandler, "call_api", new=AsyncMock(side_effect=responses)):
+            with pytest.raises(ApiException, match="Failed to decode forecast data"):
+                await dominion_client._async_get_forecast_internal(dominion_client.session)
+
+    @pytest.mark.asyncio
+    async def test_async_get_forecast_internal_invalid_json(self, dominion_client):
+        """A forecast response that is not valid JSON raises ApiException at the json.loads step."""
+        responses = [
+            '<input name="__RequestVerificationToken" type="hidden" value="token1" />',
+            "this is not json at all",  # r1 fails json.loads
         ]
 
         with patch.object(DominionSCURLHandler, "call_api", new=AsyncMock(side_effect=responses)):
@@ -1043,3 +1116,77 @@ class TestDominionSC:
 
         with pytest.raises(CannotConnect, match="Cannot retrieve request verification token"):
             dominion_client._find_verification_token(webpage, "/test", "test_func")
+
+    @pytest.mark.asyncio
+    async def test_async_get_register_reads_success(self, dominion_client):
+        """Register-aware retrieval returns one RegisterReads per UsagePoint."""
+        from dominionsc.models.register_reads import RegisterReads
+
+        dominion_client.user_id = "user_123"
+        dominion_client.access_token = "token_abc"
+
+        # Two UsagePoints (grid + solar), each with one reading.
+        xml_response = """<?xml version="1.0" encoding="UTF-8"?>
+<feed>
+    <entry>
+        <link href="https://x/Customer/C/UsagePoint/GRID_UP/MeterReading/M/IntervalBlock/IB" rel="self"/>
+        <title>Interval Consumption. Start: 2026-08-13</title>
+        <content>
+            <espi:IntervalBlock>
+                <espi:IntervalReading>
+                    <espi:timePeriod><espi:start>1706745600</espi:start><espi:duration>900</espi:duration></espi:timePeriod>
+                    <espi:value>500</espi:value>
+                </espi:IntervalReading>
+            </espi:IntervalBlock>
+        </content>
+    </entry>
+    <entry>
+        <link href="https://x/Customer/C/UsagePoint/SOLAR_UP/MeterReading/M/IntervalBlock/IB" rel="self"/>
+        <title>Interval Consumption. Start: 2026-08-13</title>
+        <content>
+            <espi:IntervalBlock>
+                <espi:IntervalReading>
+                    <espi:timePeriod><espi:start>1706745600</espi:start><espi:duration>900</espi:duration></espi:timePeriod>
+                    <espi:value>-128</espi:value>
+                </espi:IntervalReading>
+            </espi:IntervalBlock>
+        </content>
+    </entry>
+</feed>"""
+
+        mock_response = AsyncMock()
+        mock_response.text = AsyncMock(return_value=xml_response)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+        dominion_client.session.get = Mock(return_value=mock_response)
+
+        registers = await dominion_client.async_get_register_reads(
+            account="ELECTRIC",
+            start_date=datetime(2025, 2, 1),
+            end_date=datetime(2025, 2, 2),
+        )
+
+        assert len(registers) == 2
+        assert all(isinstance(r, RegisterReads) for r in registers)
+        by_id = {r.usage_point_id: r for r in registers}
+        assert by_id["GRID_UP"].reads[0].consumption == 500
+        assert by_id["SOLAR_UP"].reads[0].consumption == -128
+
+        # Correct URL built (same gb-download endpoint as flat usage reads)
+        url = dominion_client.session.get.call_args[0][0]
+        assert "user_123" in url
+        assert "measurement-type=ELECTRIC" in url
+
+    @pytest.mark.asyncio
+    async def test_async_get_register_reads_client_error(self, dominion_client):
+        """Register-aware retrieval wraps a ClientError as CannotConnect."""
+        dominion_client.user_id = "user_123"
+        dominion_client.access_token = "token_abc"
+        dominion_client.session.get = Mock(side_effect=ClientError("Network error"))
+
+        with pytest.raises(CannotConnect, match="Failed to connect to API"):
+            await dominion_client.async_get_register_reads(
+                account="ELECTRIC",
+                start_date=datetime(2025, 2, 1),
+                end_date=datetime(2025, 2, 2),
+            )
