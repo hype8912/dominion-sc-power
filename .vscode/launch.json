@@ -3,6 +3,6 @@
      "type": "debugpy",
      "request": "launch",
      "module": "dominionsc",
-     "args": ["--username", "hype8912", "--start_date", "2026-08-13", "--end_date", "2026-09-10"],
+     "args": ["--username", "[username]", "--start_date", "2026-08-13", "--end_date", "2026-09-10"],
      "console": "integratedTerminal"
    }
