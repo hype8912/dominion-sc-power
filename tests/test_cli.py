@@ -102,9 +102,7 @@ def _mock_dominionsc(usage_reads: list[UsageRead] | None = None):
     mock.async_login = AsyncMock()
     # Legacy list format: [[types], addr]
     mock.async_get_accounts = AsyncMock(return_value=[["ELECTRIC"], "3005 ELLINGTON DR"])
-    mock.async_get_register_reads = AsyncMock(
-        return_value=[RegisterReads(usage_point_id="UP1", reads=reads)]
-    )
+    mock.async_get_register_reads = AsyncMock(return_value=[RegisterReads(usage_point_id="UP1", reads=reads)])
     mock.async_get_forecast = AsyncMock()
     return mock
 

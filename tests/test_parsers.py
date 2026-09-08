@@ -13,7 +13,11 @@ import pytest
 from dominionsc.exceptions import ApiException
 from dominionsc.models.register_reads import RegisterReads
 from dominionsc.parsers.forecast import parse_forecast
-from dominionsc.parsers.greenbutton import parse_registers, parse_usage_reads
+from dominionsc.parsers.greenbutton import (
+    _extract_usage_point_id,
+    parse_registers,
+    parse_usage_reads,
+)
 from dominionsc.usage_read import UsageRead
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
@@ -279,6 +283,11 @@ class TestParseUsageReads:
 </feed>"""
         reads = parse_usage_reads(xml, "America/New_York")
         assert reads == []
+
+    def test_extract_skips_non_dict_link(self):
+        """Line 57: non-dict link entries are skipped, dict links still match."""
+        entry = {"link": ["bad-string", {"@href": "/UsagePoint/UP99"}]}
+        assert _extract_usage_point_id(entry) == "UP99"
 
 
 # ---------------------------------------------------------------------------

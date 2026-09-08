@@ -190,9 +190,7 @@ account with no solar -- `async_get_usage_reads()` returns a flat list of
 `UsageRead` objects across all registers:
 
 ```python
-usage = await client.async_get_usage_reads(
-    "ELECTRIC", start_date=start, end_date=end
-)
+usage = await client.async_get_usage_reads("ELECTRIC", start_date=start, end_date=end)
 for reading in usage:
     print(f"{reading.start_time}: {reading.consumption} Wh")
 ```
