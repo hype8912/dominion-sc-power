@@ -27,27 +27,67 @@ pip install dominion-sc-power
 
 ## Development
 
+Development uses [uv](https://docs.astral.sh/uv/) to manage the Python
+virtual environment and dependencies. Install Python 3.11 or newer and uv
+before starting. The committed `uv.lock` file keeps development installs
+reproducible.
+
 ### Setup Development Environment
 
 ```bash
-# Clone and setup
+# Clone the repository
 git clone https://github.com/sctigercat1/dominion-sc-power.git
 cd dominion-sc-power
+
+# Create .venv and install the package plus development dependencies
+uv sync --extra dev
+```
+
+The equivalent setup script is:
+
+```bash
 ./scripts/setup
 ```
 
+You can run commands without activating the environment by prefixing them
+with `uv run`:
+
+```bash
+uv run python -m dominionsc --help
+uv run pytest
+uv run ruff check .
+```
+
+To activate the environment for a shell session, run
+`source .venv/bin/activate` on macOS/Linux or `.venv\\Scripts\\activate` on
+Windows.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for dependency-management guidance,
+project conventions, testing details, and the complete developer workflow.
+
 ### Code Validation
 
-After each change, please run the following scripts to format/check your code with `ruff` and run unit tests.
+After each change, run the repository scripts. The scripts use the project
+virtual environment when it exists:
 
 ```bash
 ./scripts/lint
 ./scripts/test
 ```
 
+The direct uv equivalents are:
+
+```bash
+uv run ruff format .
+uv run ruff check . --fix
+uv run pytest
+```
+
 ### Contributing
 
-Contributions are welcome! Please submit a pull request with your proposed changes.
+Contributions are welcome! Please submit a pull request with your proposed
+changes. Before opening a pull request, update `uv.lock` when dependencies
+change and run the lint and test commands above.
 
 ## Command Line Interface
 

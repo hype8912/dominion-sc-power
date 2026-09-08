@@ -8,6 +8,7 @@ Exports:
 
 from .account import AccountInfo
 from .forecast import Forecast
+from .register_reads import RegisterReads
 from .usage_read import UsageRead
 
-__all__ = ["AccountInfo", "Forecast", "UsageRead"]
+__all__ = ["AccountInfo", "Forecast", "RegisterReads", "UsageRead"]

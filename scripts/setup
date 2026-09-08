@@ -13,13 +13,14 @@ else
     exit 1
 fi
 
-# Virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+# Install dependencies with uv. This creates or updates .venv from
+# pyproject.toml and uv.lock, including the development extra.
+if ! command -v uv >/dev/null 2>&1; then
+    echo "uv is required. Install it from https://docs.astral.sh/uv/"
+    exit 1
+fi
 
-# Dependencies
-python3 -m pip install --upgrade pip
-python3 -m pip install ".[dev]"
+uv sync --extra dev
 
 echo ""
 echo "✅ Setup complete!"

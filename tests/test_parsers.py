@@ -5,86 +5,228 @@ payloads -- no network, no credentials, no HTTP mocks required.
 See docs/REFACTOR_PLAN.md Phase 3.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
 
 from dominionsc.exceptions import ApiException
+from dominionsc.models.register_reads import RegisterReads
 from dominionsc.parsers.forecast import parse_forecast
-from dominionsc.parsers.greenbutton import parse_usage_reads
+from dominionsc.parsers.greenbutton import parse_registers, parse_usage_reads
 from dominionsc.usage_read import UsageRead
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
+# UsagePoint ids used in the redacted fixture
+GRID_UP = "REDACTED_UP_GRID"
+SOLAR_UP = "REDACTED_UP_SOLAR"
+
 
 # ---------------------------------------------------------------------------
-# Green Button XML parser
+# Green Button XML parser -- register-aware (parse_registers)
 # ---------------------------------------------------------------------------
 
 
-class TestParseUsageReads:
-    """Tests for parse_usage_reads()."""
+class TestParseRegisters:
+    """Tests for parse_registers() -- the register-separating parser."""
 
     def _load_fixture(self, name: str) -> str:
         return (FIXTURE_DIR / name).read_text(encoding="utf-8")
 
-    def test_parses_multi_register_fixture(self):
-        """Parse the committed multi-register fixture without error."""
+    def test_returns_two_registers(self):
+        """A net-metered fixture yields exactly two RegisterReads (grid + solar)."""
+        xml = self._load_fixture("greenbutton_multi_register.xml")
+        registers = parse_registers(xml, "America/New_York")
+        assert len(registers) == 2
+        for reg in registers:
+            assert isinstance(reg, RegisterReads)
+
+    def test_registers_keyed_by_usage_point_id(self):
+        """Each register carries its stable UsagePoint id from the link href."""
+        xml = self._load_fixture("greenbutton_multi_register.xml")
+        registers = parse_registers(xml, "America/New_York")
+        ids = {reg.usage_point_id for reg in registers}
+        assert ids == {GRID_UP, SOLAR_UP}
+
+    def test_daily_entries_merge_into_one_register(self):
+        """Multiple daily entries for the same UsagePoint accumulate together.
+
+        The grid register has a 2-reading day and a 1-reading day = 3 reads;
+        this proves entries are grouped by UsagePoint, not returned per-entry.
+        """
+        xml = self._load_fixture("greenbutton_multi_register.xml")
+        registers = {r.usage_point_id: r for r in parse_registers(xml, "America/New_York")}
+        assert len(registers[GRID_UP].reads) == 3
+        assert len(registers[SOLAR_UP].reads) == 3
+
+    def test_grid_values_positive(self):
+        """Grid register readings preserve their positive values, in order."""
+        xml = self._load_fixture("greenbutton_multi_register.xml")
+        registers = {r.usage_point_id: r for r in parse_registers(xml, "America/New_York")}
+        consumptions = [r.consumption for r in registers[GRID_UP].reads]
+        assert consumptions == [209, 328, 412]
+
+    def test_solar_values_negative_preserved(self):
+        """Solar-export register readings preserve negative values (sign kept)."""
+        xml = self._load_fixture("greenbutton_multi_register.xml")
+        registers = {r.usage_point_id: r for r in parse_registers(xml, "America/New_York")}
+        consumptions = [r.consumption for r in registers[SOLAR_UP].reads]
+        assert consumptions == [0, -128, -450]
+
+    def test_registers_do_not_bleed_into_each_other(self):
+        """Grid and solar readings stay in their own register (no cross-contamination)."""
+        xml = self._load_fixture("greenbutton_multi_register.xml")
+        registers = {r.usage_point_id: r for r in parse_registers(xml, "America/New_York")}
+        # No negative values should appear in the grid register
+        assert all(r.consumption >= 0 for r in registers[GRID_UP].reads)
+        # The solar register contains the negatives
+        assert any(r.consumption < 0 for r in registers[SOLAR_UP].reads)
+
+    def test_single_register_returns_one_element_list(self):
+        """A single-UsagePoint response (gas, non-solar home) returns one register."""
+        xml = """<?xml version="1.0"?>
+<feed>
+  <entry>
+    <link href="https://x/Customer/C/UsagePoint/ONLY_ONE/MeterReading/M/IntervalBlock/IB" rel="self"/>
+    <title>Interval Consumption. Start: 2026-08-13</title>
+    <content>
+      <espi:IntervalBlock>
+        <espi:IntervalReading>
+          <espi:timePeriod><espi:start>1786579200</espi:start><espi:duration>3600</espi:duration></espi:timePeriod>
+          <espi:value>15</espi:value>
+        </espi:IntervalReading>
+      </espi:IntervalBlock>
+    </content>
+  </entry>
+</feed>"""
+        registers = parse_registers(xml, "America/New_York")
+        assert len(registers) == 1
+        assert registers[0].usage_point_id == "ONLY_ONE"
+        assert len(registers[0].reads) == 1
+
+    def test_entry_without_usage_point_grouped_under_empty_key(self):
+        """An interval entry lacking a UsagePoint href is not dropped."""
+        xml = """<?xml version="1.0"?>
+<feed>
+  <entry>
+    <title>Interval Consumption. Start: 2026-08-13</title>
+    <content>
+      <espi:IntervalBlock>
+        <espi:IntervalReading>
+          <espi:timePeriod><espi:start>1786579200</espi:start><espi:duration>900</espi:duration></espi:timePeriod>
+          <espi:value>42</espi:value>
+        </espi:IntervalReading>
+      </espi:IntervalBlock>
+    </content>
+  </entry>
+</feed>"""
+        registers = parse_registers(xml, "America/New_York")
+        assert len(registers) == 1
+        assert registers[0].usage_point_id == ""
+        assert registers[0].reads[0].consumption == 42
+
+    def test_empty_feed_returns_empty_list(self):
+        """A feed with no Interval Consumption entries returns an empty list."""
+        xml = """<?xml version="1.0"?>
+<feed>
+  <entry>
+    <title>ReadingType entry</title>
+    <content><espi:ReadingType/></content>
+  </entry>
+</feed>"""
+        assert parse_registers(xml, "America/New_York") == []
+
+    def test_invalid_xml_raises_api_exception(self):
+        """Malformed XML raises ApiException, not a bare xmltodict error."""
+        with pytest.raises(ApiException, match="Unable to parse XML in parse_registers"):
+            parse_registers("this is not xml", "America/New_York")
+
+    def test_non_dict_link_is_skipped(self):
+        """A link element that xmltodict renders as a bare string is skipped, not crashed on."""
+        # When an <entry> has a single self-closing <link/> with no attributes,
+        # xmltodict can yield None/str rather than a dict; the extractor must
+        # tolerate that and fall through to the empty-key register.
+        xml = """<?xml version="1.0"?>
+<feed>
+  <entry>
+    <link/>
+    <title>Interval Consumption. Start: 2026-08-13</title>
+    <content>
+      <espi:IntervalBlock>
+        <espi:IntervalReading>
+          <espi:timePeriod><espi:start>1786579200</espi:start><espi:duration>900</espi:duration></espi:timePeriod>
+          <espi:value>7</espi:value>
+        </espi:IntervalReading>
+      </espi:IntervalBlock>
+    </content>
+  </entry>
+</feed>"""
+        registers = parse_registers(xml, "America/New_York")
+        assert len(registers) == 1
+        assert registers[0].usage_point_id == ""
+        assert registers[0].reads[0].consumption == 7
+
+    def test_link_without_usage_point_href_yields_empty_id(self):
+        """A link whose href has no /UsagePoint/ segment yields the empty-key register."""
+        xml = """<?xml version="1.0"?>
+<feed>
+  <entry>
+    <link href="https://x/Customer/C/SomethingElse/123" rel="self"/>
+    <title>Interval Consumption. Start: 2026-08-13</title>
+    <content>
+      <espi:IntervalBlock>
+        <espi:IntervalReading>
+          <espi:timePeriod><espi:start>1786579200</espi:start><espi:duration>900</espi:duration></espi:timePeriod>
+          <espi:value>9</espi:value>
+        </espi:IntervalReading>
+      </espi:IntervalBlock>
+    </content>
+  </entry>
+</feed>"""
+        registers = parse_registers(xml, "America/New_York")
+        assert len(registers) == 1
+        assert registers[0].usage_point_id == ""
+        assert registers[0].reads[0].consumption == 9
+
+
+# ---------------------------------------------------------------------------
+# Green Button XML parser -- flat wrapper (parse_usage_reads)
+# ---------------------------------------------------------------------------
+
+
+class TestParseUsageReads:
+    """Tests for parse_usage_reads() -- the backward-compat flat wrapper."""
+
+    def _load_fixture(self, name: str) -> str:
+        return (FIXTURE_DIR / name).read_text(encoding="utf-8")
+
+    def test_flattens_all_registers(self):
+        """Flat wrapper concatenates every register's readings (3 grid + 3 solar = 6)."""
         xml = self._load_fixture("greenbutton_multi_register.xml")
         reads = parse_usage_reads(xml, "America/New_York")
-
-        # Two UsagePoint entries x 2 intervals each = 4 readings total.
-        # Known limitation: all four are in one flat list regardless of register.
-        assert len(reads) == 4
+        assert len(reads) == 6
         for r in reads:
             assert isinstance(r, UsageRead)
 
-    def test_grid_delivery_values_preserved(self):
-        """Grid-delivery register values (positive Wh) are parsed correctly."""
+    def test_all_values_present_across_registers(self):
+        """Every reading value from both registers appears in the flat list."""
         xml = self._load_fixture("greenbutton_multi_register.xml")
-        reads = parse_usage_reads(xml, "America/New_York")
-
-        # Grid readings are the first two (from UsagePoint 1, register :1)
-        assert reads[0].consumption == 209
-        assert reads[1].consumption == 328
-
-    def test_solar_export_negative_values_preserved(self):
-        """Solar-export register values (negative Wh) survive the int() cast."""
-        xml = self._load_fixture("greenbutton_multi_register.xml")
-        reads = parse_usage_reads(xml, "America/New_York")
-
-        # Solar readings are the second two (from UsagePoint 3, register :3)
-        assert reads[2].consumption == 0
-        assert reads[3].consumption == -128
+        values = sorted(r.consumption for r in parse_usage_reads(xml, "America/New_York"))
+        assert values == sorted([209, 328, 412, 0, -128, -450])
 
     def test_interval_duration_correct(self):
-        """end_time - start_time should reflect the espi:duration field (900s = 14:59)."""
+        """end_time - start_time reflects the espi:duration field (900s -> 899s span)."""
         xml = self._load_fixture("greenbutton_multi_register.xml")
         reads = parse_usage_reads(xml, "America/New_York")
-
-        r = reads[0]
-        # duration=900 seconds; end = start + 899
-        delta = r.end_time - r.start_time
-        assert delta.seconds == 899
+        assert reads[0].end_time - reads[0].start_time == timedelta(seconds=899)
 
     def test_timestamps_are_timezone_aware(self):
-        """Returned datetimes are timezone-aware in the supplied utility timezone."""
+        """Returned datetimes are timezone-aware."""
         xml = self._load_fixture("greenbutton_multi_register.xml")
-        reads = parse_usage_reads(xml, "America/New_York")
-
-        for r in reads:
+        for r in parse_usage_reads(xml, "America/New_York"):
             assert r.start_time.tzinfo is not None
             assert r.end_time.tzinfo is not None
-
-    def test_non_interval_entries_skipped(self):
-        """ReadingType and other non-Interval Consumption entries are ignored."""
-        xml = self._load_fixture("greenbutton_multi_register.xml")
-        reads = parse_usage_reads(xml, "America/New_York")
-
-        # Fixture has 1 ReadingType entry that should be skipped -- if not skipped
-        # we would get a KeyError and the test would fail with ApiException, not 4.
-        assert len(reads) == 4
 
     def test_single_interval_reading_not_a_list(self):
         """Xmltodict returns a dict (not list) for a single child -- _ensure_list handles it."""
@@ -110,7 +252,7 @@ class TestParseUsageReads:
         assert reads[0].consumption == 500
 
     def test_invalid_xml_raises_api_exception(self):
-        """Malformed XML raises ApiException, not a bare xmltodict error."""
+        """Malformed XML raises ApiException."""
         with pytest.raises(ApiException, match="Unable to parse XML"):
             parse_usage_reads("this is not xml", "America/New_York")
 

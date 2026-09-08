@@ -21,9 +21,10 @@ from .auth import LoginFlow, find_verification_token
 from .config import UtilityConfig
 from .exceptions import ApiException, CannotConnect, InvalidAuth
 from .models.forecast import Forecast
+from .models.register_reads import RegisterReads
 from .models.usage_read import UsageRead
 from .parsers.forecast import parse_forecast
-from .parsers.greenbutton import parse_usage_reads
+from .parsers.greenbutton import parse_registers, parse_usage_reads
 from .transport import DominionSCURLHandler
 
 _LOGGER = logging.getLogger(__file__)
@@ -199,6 +200,35 @@ class DominionSC:
         url = _urls.gb_download_url(self._config, self.user_id, start_time_timestamp, end_date_timestamp, account)
         r = await self._async_get_request(url, self._get_headers())
         return parse_usage_reads(r, self.timezone, url=url)
+
+    async def async_get_register_reads(
+        self,
+        account: str,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> list[RegisterReads]:
+        """Get usage reads grouped by meter register (ESPI UsagePoint).
+
+        Unlike async_get_usage_reads (which flattens everything into one
+        list), this keeps each physical register separate. For a
+        net-metered solar ELECTRIC account this returns one RegisterReads
+        for grid delivery and another for solar export, each keyed on its
+        stable UsagePoint id, with reading signs preserved. Single-register
+        accounts (most homes, all gas) return a one-element list.
+
+        The library does not label registers as grid vs solar -- that
+        decision belongs to the consumer.
+
+        :raises CannotConnect: if there is a retryable connection exception
+        :raises ApiException: if API response cannot be parsed (API structure may have changed)
+        """
+        start_date = datetime.combine(start_date, datetime.min.time())
+        end_date = datetime.combine(end_date, datetime.min.time())
+        start_time_timestamp = int(start_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
+        end_date_timestamp = int(end_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
+        url = _urls.gb_download_url(self._config, self.user_id, start_time_timestamp, end_date_timestamp, account)
+        r = await self._async_get_request(url, self._get_headers())
+        return parse_registers(r, self.timezone, url=url)
 
     def _get_headers(self) -> dict[str, str]:
         return _headers.bidgely_headers(self._config, access_token=self.access_token)
