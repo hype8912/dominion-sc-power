@@ -13,6 +13,11 @@ Fixes compared to the original __main__.py:
 - A "service" column is added to CSV output so readings from different
   measurement types (ELECTRIC, GAS) are distinguishable in multi-account
   files.
+- A "register" column (the ESPI UsagePoint id) is added so that, within a
+  single measurement type, separate physical meters are distinguishable --
+  e.g. a net-metered solar account's grid-delivery register vs its
+  solar-export register (which carries negative values). Uses
+  async_get_register_reads() rather than the flat async_get_usage_reads().
 """
 
 import argparse
@@ -158,33 +163,36 @@ async def run(args: argparse.Namespace) -> int:
             # silently overwriting each prior account's output (finding F9).
             with open(args.csv, "w", newline="") as csv_file:
                 writer = csv.writer(csv_file)
-                writer.writerow(["service", "start_time", "end_time", "consumption"])
+                writer.writerow(["service", "register", "start_time", "end_time", "consumption"])
                 for account in measurement_types:
-                    usage_data = await dominionsc.async_get_usage_reads(
+                    registers = await dominionsc.async_get_register_reads(
                         account,
                         args.start_date,
                         args.end_date,
                     )
-                    for usage_read in usage_data:
-                        writer.writerow(
-                            [
-                                account,
-                                usage_read.start_time,
-                                usage_read.end_time,
-                                usage_read.consumption,
-                            ]
-                        )
+                    for register in registers:
+                        for usage_read in register.reads:
+                            writer.writerow(
+                                [
+                                    account,
+                                    register.usage_point_id,
+                                    usage_read.start_time,
+                                    usage_read.end_time,
+                                    usage_read.consumption,
+                                ]
+                            )
         else:
             for account in measurement_types:
-                usage_data = await dominionsc.async_get_usage_reads(
+                registers = await dominionsc.async_get_register_reads(
                     account,
                     args.start_date,
                     args.end_date,
                 )
-                print(f"\n[{account}]")
-                print("start_time\tend_time\tconsumption")
-                for usage_read in usage_data:
-                    print(f"{usage_read.start_time}\t{usage_read.end_time}\t{usage_read.consumption}")
+                for register in registers:
+                    print(f"\n[{account} / register {register.usage_point_id}]")
+                    print("start_time\tend_time\tconsumption")
+                    for usage_read in register.reads:
+                        print(f"{usage_read.start_time}\t{usage_read.end_time}\t{usage_read.consumption}")
     return 0
 
 

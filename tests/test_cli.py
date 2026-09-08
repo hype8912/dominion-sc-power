@@ -14,6 +14,7 @@ import pytest
 
 from dominionsc.cli import build_parser, main, run
 from dominionsc.exceptions import InvalidAuth, MfaChallenge
+from dominionsc.models.register_reads import RegisterReads
 from dominionsc.usage_read import UsageRead
 
 # ---------------------------------------------------------------------------
@@ -91,12 +92,19 @@ def _make_usage_reads() -> list[UsageRead]:
 
 
 def _mock_dominionsc(usage_reads: list[UsageRead] | None = None):
-    """Return a mock DominionSC that returns controlled data."""
+    """Return a mock DominionSC that returns controlled data.
+
+    The CLI now uses async_get_register_reads(), so the mock wraps the
+    reads in a single RegisterReads (one register, id "UP1") by default.
+    """
+    reads = usage_reads or _make_usage_reads()
     mock = MagicMock()
     mock.async_login = AsyncMock()
     # Legacy list format: [[types], addr]
     mock.async_get_accounts = AsyncMock(return_value=[["ELECTRIC"], "3005 ELLINGTON DR"])
-    mock.async_get_usage_reads = AsyncMock(return_value=usage_reads or _make_usage_reads())
+    mock.async_get_register_reads = AsyncMock(
+        return_value=[RegisterReads(usage_point_id="UP1", reads=reads)]
+    )
     mock.async_get_forecast = AsyncMock()
     return mock
 
@@ -129,7 +137,7 @@ class TestRunCSV:
             await run(args)
 
         rows = list(csv.reader(out.read_text().splitlines()))
-        assert rows[0] == ["service", "start_time", "end_time", "consumption"]
+        assert rows[0] == ["service", "register", "start_time", "end_time", "consumption"]
 
     @pytest.mark.asyncio
     async def test_csv_includes_service_column(self, tmp_path):
@@ -159,6 +167,8 @@ class TestRunCSV:
         # Skip header
         data_rows = rows[1:]
         assert all(row[0] == "ELECTRIC" for row in data_rows)
+        # register column (row[1]) carries the UsagePoint id from the mock
+        assert all(row[1] == "UP1" for row in data_rows)
 
     @pytest.mark.asyncio
     async def test_csv_not_overwritten_between_accounts(self, tmp_path):
@@ -176,7 +186,7 @@ class TestRunCSV:
             ]
         )
 
-        # Two accounts, two reads each
+        # Two accounts: electric (2 reads, one register) + gas (1 read, one register)
         reads_electric = _make_usage_reads()
         reads_gas = [
             UsageRead(
@@ -189,7 +199,12 @@ class TestRunCSV:
         mock = MagicMock()
         mock.async_login = AsyncMock()
         mock.async_get_accounts = AsyncMock(return_value=[["ELECTRIC", "GAS"], "3005 ELLINGTON DR"])
-        mock.async_get_usage_reads = AsyncMock(side_effect=[reads_electric, reads_gas])
+        mock.async_get_register_reads = AsyncMock(
+            side_effect=[
+                [RegisterReads(usage_point_id="ELEC_UP", reads=reads_electric)],
+                [RegisterReads(usage_point_id="GAS_UP", reads=reads_gas)],
+            ]
+        )
         mock.async_get_forecast = AsyncMock()
 
         with (
@@ -207,6 +222,59 @@ class TestRunCSV:
         assert data_rows[0][0] == "ELECTRIC"
         assert data_rows[1][0] == "ELECTRIC"
         assert data_rows[2][0] == "GAS"
+
+    @pytest.mark.asyncio
+    async def test_csv_separates_grid_and_solar_registers(self, tmp_path):
+        """A multi-register ELECTRIC account writes distinct register ids per row.
+
+        This is the net-metered solar case: one ELECTRIC measurement type
+        contains two UsagePoints (grid + solar export). The register column
+        must distinguish them, and negative solar values must be preserved.
+        """
+        out = tmp_path / "out.csv"
+        args = _args("--csv", str(out))
+
+        grid_reads = [
+            UsageRead(
+                start_time=datetime(2026, 8, 13, 0, 0, 0, tzinfo=UTC),
+                end_time=datetime(2026, 8, 13, 0, 14, 59, tzinfo=UTC),
+                consumption=209,
+            )
+        ]
+        solar_reads = [
+            UsageRead(
+                start_time=datetime(2026, 8, 13, 0, 0, 0, tzinfo=UTC),
+                end_time=datetime(2026, 8, 13, 0, 14, 59, tzinfo=UTC),
+                consumption=-128,
+            )
+        ]
+
+        mock = MagicMock()
+        mock.async_login = AsyncMock()
+        mock.async_get_accounts = AsyncMock(return_value=[["ELECTRIC"], "3005 ELLINGTON DR"])
+        mock.async_get_register_reads = AsyncMock(
+            return_value=[
+                RegisterReads(usage_point_id="GRID_UP", reads=grid_reads),
+                RegisterReads(usage_point_id="SOLAR_UP", reads=solar_reads),
+            ]
+        )
+        mock.async_get_forecast = AsyncMock()
+
+        with (
+            patch("dominionsc.cli.aiohttp.ClientSession") as mock_session_cls,
+            patch("dominionsc.cli.DominionSC", return_value=mock),
+        ):
+            mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            await run(args)
+
+        rows = list(csv.reader(out.read_text().splitlines()))
+        data_rows = rows[1:]
+        # Both registers present, distinguishable by the register column
+        by_register = {row[1]: row for row in data_rows}
+        assert set(by_register) == {"GRID_UP", "SOLAR_UP"}
+        assert by_register["GRID_UP"][4] == "209"
+        assert by_register["SOLAR_UP"][4] == "-128"  # solar export sign preserved
 
     @pytest.mark.asyncio
     async def test_run_returns_zero_on_success(self, tmp_path):
@@ -265,11 +333,11 @@ class TestRunConsole:
 
         out = capsys.readouterr().out
         assert result == 0
-        # forecast branch (lines 148-149) executed
+        # forecast branch executed
         mock.async_get_forecast.assert_awaited_once()
         assert "FORECAST_SENTINEL" in out
-        # console read-printing branch (lines 178-187) executed
-        assert "[ELECTRIC]" in out
+        # console read-printing branch executed, now with register in the header
+        assert "[ELECTRIC / register UP1]" in out
         assert "209" in out and "328" in out
 
 
