@@ -288,11 +288,16 @@ class TestRunCSV:
         parser = build_parser()
         args = parser.parse_args(
             [
-                "--username", "u",
-                "--password", "p",
-                "--csv", str(out),
-                "--start_date", "2026-09-01",
-                "--end_date", "2026-09-08",
+                "--username",
+                "u",
+                "--password",
+                "p",
+                "--csv",
+                str(out),
+                "--start_date",
+                "2026-09-01",
+                "--end_date",
+                "2026-09-08",
             ]
         )
         assert args.start_date is not None
@@ -315,9 +320,12 @@ class TestRunCSV:
         parser = build_parser()
         args = parser.parse_args(
             [
-                "--username", "u",
-                "--password", "p",
-                "--csv", str(out),
+                "--username",
+                "u",
+                "--password",
+                "p",
+                "--csv",
+                str(out),
             ]
         )
         assert args.start_date is None
@@ -623,6 +631,7 @@ class TestHandleMfa:
     async def test_invalid_tfa_choice_returns_false(self):
         """Cover cli.py 103-105: bad option index returns False."""
         from dominionsc.cli import _handle_mfa
+
         handler = _mfa_handler(options={"sms_1": "Text to ***1234"})
         challenge = MfaChallenge("tfa needed", handler)
         dominionsc = MagicMock()
