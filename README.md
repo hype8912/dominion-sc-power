@@ -7,6 +7,8 @@ This library is used by the custom [Home Assistant Integration for Dominion Ener
 ## Features
 
 - Retrieve historical energy usage data (electric and gas)
+- Separate readings by meter register (ESPI UsagePoint), so net-metered
+  solar accounts can distinguish grid-delivery from solar-export data
 - Get current bill forecasts with cost projections
 - Support for two-factor authentication (TFA)
 - Async/await architecture using aiohttp
@@ -16,7 +18,6 @@ This library is used by the custom [Home Assistant Integration for Dominion Ener
 
 - Only one service address per Dominion account is currently supported (mainly because I do not know what the API responses look like for users with multiple service addresses) - you will get an error if this applies to you - please report the error under issues which should include the relevant API response
 - TFA is required (again mainly because I do not know what the flow without TFA looks like) - report this error under issues if it applies to you
-- No explicit support for solar (grid export)
 - Data is delayed by 24-48 hours as this is when it is reported by Dominion
 
 ## Installation
@@ -120,6 +121,22 @@ python -m dominionsc -vv
 - `--csv`: Output CSV file path for usage data
 - `-v, --verbose`: Enable verbose logging (use multiple times for more verbosity)
 
+### CSV output format
+
+The CSV has five columns:
+
+```
+service,register,start_time,end_time,consumption
+```
+
+- `service` -- the measurement type (`ELECTRIC` or `GAS`)
+- `register` -- the ESPI UsagePoint id, which distinguishes physical meters
+  within a single service. A net-metered solar account has two ELECTRIC
+  registers (grid delivery and solar export); they share the same `service`
+  value but different `register` values. Solar-export rows carry negative
+  `consumption` values.
+- `consumption` -- Wh for electric, ft³ for gas
+
 ## Sample Implementation
 
 ```python
@@ -145,20 +162,47 @@ async def main():
         forecast = await client.async_get_forecast()
         print(f"Forecasted cost: ${forecast.forecasted_cost}")
 
-        # Get usage data
-        accounts = await client.async_get_accounts()
-        for account in accounts[0]:
-            # accounts[1] is the service address
-            # each account is in ['ELECTRIC' or 'GAS']
-            usage = await client.async_get_usage_reads(
-                account, start_date=datetime.now() - timedelta(days=7), end_date=datetime.now()
-            )
-            for reading in usage:
-                print(f"{reading.start_time}: {reading.consumption} Wh")
+        # async_get_accounts() returns [measurement_types, service_address]
+        measurement_types, service_address = await client.async_get_accounts()
+        print(f"Service address: {service_address}")
+
+        start = datetime.now() - timedelta(days=7)
+        end = datetime.now()
+
+        for account in measurement_types:  # e.g. "ELECTRIC", "GAS"
+            # Register-aware: keeps each physical meter (ESPI UsagePoint)
+            # separate. A net-metered solar ELECTRIC account returns two
+            # registers -- grid delivery and solar export (negative values).
+            registers = await client.async_get_register_reads(account, start, end)
+            for register in registers:
+                print(f"{account} register {register.usage_point_id}:")
+                for reading in register.reads:
+                    print(f"  {reading.start_time}: {reading.consumption} Wh")
 
 
 asyncio.run(main())
 ```
+
+### Flat (single-list) usage reads
+
+If you don't need per-register separation -- for example a single-meter
+account with no solar -- `async_get_usage_reads()` returns a flat list of
+`UsageRead` objects across all registers:
+
+```python
+usage = await client.async_get_usage_reads(
+    "ELECTRIC", start_date=start, end_date=end
+)
+for reading in usage:
+    print(f"{reading.start_time}: {reading.consumption} Wh")
+```
+
+> **Note for net-metered / solar accounts:** a single `ELECTRIC` request can
+> contain multiple meter registers (grid delivery + solar export). The flat
+> `async_get_usage_reads()` merges them into one list, producing overlapping
+> timestamps and mixed positive/negative values with no way to tell the
+> registers apart. Use `async_get_register_reads()` if that distinction
+> matters to you.
 
 ## Handling two-Factor Authentication (TFA)
 
