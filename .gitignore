@@ -140,3 +140,9 @@ login*.txt
 data*.json
 data*.txt
 login*.json
+
+# Local CLI output (may contain real account data)
+# Note: intentionally NOT a blanket *.csv so future CSV test fixtures
+# under tests/ can still be committed. Add specific output names here.
+usage*.csv
+/*.csv
