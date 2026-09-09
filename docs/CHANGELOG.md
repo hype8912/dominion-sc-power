@@ -10,6 +10,14 @@ are recorded here as they land on the development branch.
 
 ### Added
 
+- **Declarative Residential Rate Catalog**: Added a complete, data-only residential tariff catalog in `dominionsc.rates` for Dominion Energy South Carolina (effective July 2026).
+  - Includes electric rates: `RATE_2` (Low Use), `RATE_5` (Time of Use), `RATE_6` (Energy Saver), `RATE_7` (Time of Use Demand), and `RATE_8` (Standard).
+  - Includes gas rates: `RATE_32S` (Standard) and `RATE_32V` (Value).
+  - Added lookup functions `get_rate_plan(code)` and `get_available_rate_plans()`.
+- **Rate Plan Data Models**: Added robust, immutable data models in `dominionsc.models.rate_plan` to represent tariff structures using a discriminated union for charges:
+  - `DailyCharge`, `MonthlyCharge`, `FlatUsageCharge`, `TieredUsageCharge`, `TimeOfUseCharge`, and `DemandCharge`.
+  - Supporting models: `Commodity`, `UsageUnit`, `Season`, `UsageTier`, `TimeOfUsePeriod`, `TimeWindow`, `EligibilityRule`, and `Adjustment`.
+- Comprehensive unit tests for the rate catalog and models in `tests/test_rates.py` with 100% code coverage.
 - `async_get_register_reads(account, start, end)` on `DominionSC`: returns
   `list[RegisterReads]`, keeping each physical meter register (ESPI
   UsagePoint) separate. Net-metered solar accounts now expose grid-delivery
