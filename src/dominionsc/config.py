@@ -15,7 +15,38 @@ from .const import BIDGELY_PILOT_ID, USER_AGENT
 
 @dataclass(frozen=True)
 class UtilityConfig:
-    """Static configuration for a utility / Bidgely pilot deployment."""
+    """Immutable configuration bundle for one utility / Bidgely pilot deployment.
+
+    All modules that build URLs (``urls.py``) or HTTP headers (``headers.py``)
+    accept a ``UtilityConfig`` rather than reading module-level constants, so
+    the full set of deployment parameters is visible in one place.
+
+    In normal usage you do not need to instantiate this class -- ``DominionSC``
+    creates ``DEFAULT_CONFIG`` internally. Override individual fields only when
+    testing against a different environment or a different Bidgely pilot::
+
+        from dominionsc.config import UtilityConfig
+
+        staging_config = UtilityConfig(
+            dominion_endpoint="https://staging.dominionenergysc.com",
+            pilot_id="99999",
+        )
+
+    Attributes:
+        name: Human-readable utility name, used for display purposes only.
+        dominion_endpoint: Base URL for the Dominion Energy SC customer portal.
+            All ``fusionapi`` paths are appended to this.
+        bidgely_endpoint: Base URL for the Bidgely metering analytics API.
+            ``wc-session`` and ``gb-download`` paths are appended to this.
+        timezone: IANA timezone name for the utility's service territory.
+            Interval timestamps are converted from UTC to this zone.
+        pilot_id: Bidgely multi-tenant pilot identifier that routes requests
+            to the correct Dominion SC data pipeline. See ``const.py`` for
+            the history of this value and why it matters.
+        user_agent: Browser User-Agent string sent with every request. See
+            ``const.py`` for guidance on updating this value.
+
+    """
 
     name: str = "Dominion Energy SC"
     dominion_endpoint: str = "https://account.dominionenergysc.com"
@@ -26,3 +57,8 @@ class UtilityConfig:
 
 
 DEFAULT_CONFIG = UtilityConfig()
+"""Singleton ``UtilityConfig`` with all default values for Dominion Energy SC.
+
+Import and use this when you need the config outside of a ``DominionSC``
+instance, for example in standalone URL-building utilities.
+"""
