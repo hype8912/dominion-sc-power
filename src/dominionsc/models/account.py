@@ -25,7 +25,7 @@ class AccountInfo:
     """Measurement types active for this account, e.g. ['ELECTRIC', 'GAS']."""
 
     service_address_and_account_no: str = ""
-    """Service address and account number string, e.g. '3005 ELLINGTON DR (*-****-****0-4464)'."""
+    """Service address and account number string, e.g. '123 MAIN ST (*-****-****0-4464)'."""
 
     def to_legacy_list(self) -> list:
         """Convert to the old positional [[types], addr] format.

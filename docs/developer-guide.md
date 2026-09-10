@@ -291,19 +291,86 @@ Pure function `parse_forecast(payload, url)`. Takes the already-decoded JSON dic
 
 ### `models/` — Data classes
 
-All pure data with no business logic:
+All pure data with no business logic.
+
+**Usage and account models** (`models/usage_read.py`, `models/register_reads.py`, `models/forecast.py`, `models/account.py`):
 
 | Model | Key fields |
 |-------|-----------|
 | `UsageRead` | `start_time`, `end_time`, `consumption` (Wh or ft³) |
 | `RegisterReads` | `usage_point_id`, `flow_direction`, `reads: list[UsageRead]` |
-| `Forecast` | `start_date`, `end_date`, `cost_to_date`, `forecasted_cost`, `typical_cost` |
+| `Forecast` | `start_date`, `end_date`, `cost_to_date`, `forecasted_cost`, `typical_cost: float \| None` |
 | `AccountInfo` | `measurement_types`, `service_address_and_account_no`; `to_legacy_list()` |
-| `RatePlan` | `code`, `name`, `commodity`, `charges`, `eligibility_rules`, `adjustments` |
+
+**Rate plan models** (`models/rate_plan.py`) — see the `rates.py` section above for the full type hierarchy:
+
+| Model | Role |
+|-------|------|
+| `RatePlan` | Top-level tariff definition |
+| `DailyCharge` | Fixed $/day charge component |
+| `MonthlyCharge` | Fixed $/billing-cycle charge component |
+| `FlatUsageCharge` | Uniform $/unit charge component |
+| `TieredUsageCharge` | Tiered blocks that can vary by `Season` |
+| `UsageTier` | One cumulative tier within `TieredUsageCharge` |
+| `TimeOfUseCharge` | Time-of-day pricing that can vary by `Season` |
+| `TimeOfUsePeriod` | One named period (on-peak / off-peak / super-off-peak) |
+| `TimeWindow` | A `[start, end)` clock-time range within a `TimeOfUsePeriod` |
+| `DemandCharge` | Peak kW demand charge |
+| `EligibilityRule` | Informational eligibility requirement |
+| `Adjustment` | Informational billing adjustment |
+| `Commodity` | `ELECTRICITY` / `GAS` enum |
+| `UsageUnit` | `KWH` / `THERM` enum |
+| `Season` | `SUMMER` / `WINTER` enum |
 
 ### `rates.py` — Rate plan catalog
 
-Hard-coded residential tariff definitions for all current plans (effective July 1, 2026). The plans are stored in `MappingProxyType` dictionaries keyed by code. Use `get_rate_plan(code)` for lookup or `get_available_rate_plans()` to iterate.
+Declarative, hard-coded definitions of all current Dominion Energy SC residential tariffs (effective July 1, 2026). No network calls, no parsing — purely data. The plan constants (`RATE_2`, `RATE_5`, etc.) are assembled from types defined in `models/rate_plan.py` and stored in three read-only `MappingProxyType` dicts:
+
+| Name | Contents |
+|------|----------|
+| `RESIDENTIAL_ELECTRIC_RATE_PLANS` | Rate 2, 5, 6, 7, 8 — keyed by code string |
+| `RESIDENTIAL_GAS_RATE_PLANS` | Rate 32S, 32V — keyed by code string |
+| `RESIDENTIAL_RATE_PLANS` | All of the above merged |
+
+**Lookup functions:** `get_rate_plan(code)` returns a `RatePlan | None`; `get_available_rate_plans()` returns a `tuple[RatePlan, ...]` of all plans.
+
+**Rate plan breakdown:**
+
+| Constant | Code | Commodity | Summary |
+|----------|------|-----------|---------|
+| `RATE_2` | `"rate_2"` | Electric | Low Use — flat rate; requires ≤400 kWh each of the prior 12 billing periods |
+| `RATE_5` | `"rate_5"` | Electric | Time of Use — three price tiers by time-of-day, varies summer/winter |
+| `RATE_6` | `"rate_6"` | Electric | Energy Saver — tiered rate for energy-efficient homes meeting insulation/equipment requirements |
+| `RATE_7` | `"rate_7"` | Electric | TOU Demand — time-of-use energy rate plus a kW demand charge |
+| `RATE_8` | `"rate_8"` | Electric | Standard — tiered (two tiers per season); the default plan for most residential customers |
+| `RATE_32S` | `"rate_32s"` | Gas | Standard Gas — monthly fixed + flat per-therm rate |
+| `RATE_32V` | `"rate_32v"` | Gas | Value Gas — lower per-therm rate; requires ≥10 therm average in June/July/August |
+
+### `models/rate_plan.py` — Rate plan type system
+
+Defines all the dataclasses and enums that compose a `RatePlan`. All types are frozen (`frozen=True`) and slotted (`slots=True`). The `Charge` type alias is a discriminated union of the six concrete charge types, keyed on the `kind` literal field:
+
+```
+RatePlan
+├── charges: tuple[Charge, ...]
+│   ├── DailyCharge          kind="daily"       — fixed $/day
+│   ├── MonthlyCharge        kind="monthly"     — fixed $/cycle
+│   ├── FlatUsageCharge      kind="flat_usage"  — uniform $/kWh or $/therm
+│   ├── TieredUsageCharge    kind="tiered_usage"— tiered blocks, varies by Season
+│   │   └── tiers_by_season: {Season → tuple[UsageTier, ...]}
+│   ├── TimeOfUseCharge      kind="time_of_use" — rate by time-of-day, varies by Season
+│   │   └── periods_by_season: {Season → tuple[TimeOfUsePeriod, ...]}
+│   │       └── TimeOfUsePeriod
+│   │           └── windows: tuple[TimeWindow, ...]
+│   └── DemandCharge         kind="demand"      — $/kW of peak demand
+├── eligibility_rules: tuple[EligibilityRule, ...]  — informational
+└── adjustments: tuple[Adjustment, ...]             — informational
+```
+
+**Enums:**
+- `Commodity` — `ELECTRICITY` / `GAS` (StrEnum values: `"electricity"` / `"gas"`)
+- `UsageUnit` — `KWH` / `THERM` (StrEnum values: `"kWh"` / `"therm"`)
+- `Season` — `SUMMER` / `WINTER` (StrEnum values: `"summer"` / `"winter"`)
 
 ### `cli.py` — Command-line interface
 
@@ -377,12 +444,37 @@ If the Dominion portal starts rejecting requests, update `USER_AGENT` in `src/do
 
 ### Update rate plans
 
-Rate plans are defined in `src/dominionsc/rates.py`. When Dominion Energy SC publishes new tariff rates:
+Rate plans are defined in `src/dominionsc/rates.py` using types from `src/dominionsc/models/rate_plan.py`. Dominion Energy SC typically publishes updated tariffs on July 1 each year.
 
-1. Update the `_EFFECTIVE_FROM` date constant.
-2. Update the rate amounts in the relevant `RATE_*` constants.
-3. Add or remove eligibility rules as needed.
-4. Update `tests/test_rates.py` to reflect the new values.
+**When rates change (price adjustments only):**
+
+1. Update `_EFFECTIVE_FROM = date(YYYY, 7, 1)` at the top of `rates.py`.
+2. Update the `Decimal` amounts in the affected `RATE_*` constants (e.g., `DailyCharge(amount=Decimal("0.36164"))`).
+3. Update `tests/test_rates.py` — find the assertions for the changed plan and update the expected values.
+
+**When a new charge type or structure is added:**
+
+1. If the new structure doesn't map to any existing `Charge` subclass, add a new frozen dataclass in `models/rate_plan.py` following the existing pattern (add a `kind: Literal["..."]` discriminant field).
+2. Add the new type to the `Charge` type alias in `models/rate_plan.py`.
+3. Export the new type from `src/dominionsc/__init__.py` and add it to `__all__`.
+4. Use the new type in the relevant `RATE_*` constant in `rates.py`.
+5. Add tests in `test_rates.py`.
+6. Document the new type in `docs/api-reference.md` under the Charge union table.
+
+**When a new plan is added:**
+
+1. Define a new `RATE_XX = RatePlan(...)` constant in `rates.py`.
+2. Add it to the appropriate dict (`RESIDENTIAL_ELECTRIC_RATE_PLANS` or `RESIDENTIAL_GAS_RATE_PLANS`).
+3. Export the new constant from `__init__.py` and `__all__`.
+4. Add tests in `test_rates.py`.
+5. Document it in `docs/api-reference.md` under the rate plan catalog table.
+
+**When a plan is removed or superseded:**
+
+1. Remove the constant from `rates.py` and from the relevant dict.
+2. Remove the export from `__init__.py` and `__all__`.
+3. If the `effective_to` date is known, set it rather than deleting the constant — this preserves the historical record.
+4. Update `tests/test_rates.py` and `docs/api-reference.md`.
 
 Rate plans are purely declarative data — changing them does not affect the API communication logic.
 

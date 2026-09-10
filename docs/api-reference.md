@@ -554,9 +554,11 @@ UsageUnit.THERM  # value: "therm"
 #### `Season`
 
 ```python
-Season.SUMMER  # value: "summer"  (typically June–September)
-Season.WINTER  # value: "winter"  (typically October–May)
+Season.SUMMER  # value: "summer"
+Season.WINTER  # value: "winter"
 ```
+
+Dominion Energy SC's published tariffs define summer as **June through September** and winter as **October through May**. The library does not determine which season applies to a given date — that decision belongs to the consumer. When calculating costs from interval reads, check the billing month against these ranges to select the correct `tiers_by_season` or `periods_by_season` entry.
 
 ---
 
