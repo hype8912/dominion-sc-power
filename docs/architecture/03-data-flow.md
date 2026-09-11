@@ -14,11 +14,11 @@ sequenceDiagram
     participant Parser as parsers/greenbutton.py
     participant Models as models/
 
-    User->>CLI: python -m dominionsc --email ...
+    User->>CLI: python -m dominionsc --username ...
     CLI->>Client: DominionSC(session)
-    Client->>Auth: auth_login(email, password)
-    Auth->>Transport: POST /login
-    Transport->>URLs: build_login_url()
+    Client->>Auth: LoginFlow.execute(username, password)
+    Auth->>Transport: GET /access/#login
+    Transport->>URLs: login_page_url()
     URLs-->>Transport: URL
     Transport->>API: login request
     API-->>Transport: session cookie + possible TFA
@@ -33,7 +33,7 @@ sequenceDiagram
     Auth-->>Client: cookie jar ready
 
     Client->>Transport: GET usage / forecast
-    Transport->>URLs: build_usage_url(account_id)
+    Transport->>URLs: gb_download_url(user_id, ...)
     Transport->>API: request with cookies
     API-->>Transport: XML / JSON response
     Transport-->>Client: raw response
@@ -51,8 +51,8 @@ sequenceDiagram
 flowchart TD
     A["User / CLI args"] --> B["cli.run()"]
     B --> C["DominionSC.init(session, cookie_jar)"]
-    C --> D["auth.auth_login()"]
-    D --> E["transport POST login"]
+    C --> D["auth.LoginFlow.execute()"]
+    D --> E["transport GET login page"]
     E --> F{"TFA?"}
     F -- Yes --> G["MfaChallenge -> submit TFA"]
     G --> H["transport POST TFA"]

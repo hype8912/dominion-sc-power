@@ -75,6 +75,11 @@ dominion-sc-power/
 │   ├── test_cli.py
 │   ├── test_rates.py
 │   ├── test_helpers.py
+│   ├── test_headers.py
+│   ├── test_urls.py
+│   ├── test_config.py
+│   ├── test_account.py
+│   ├── test_transport.py
 │   ├── test_exceptions_coverage.py
 │   └── test_main_coverage.py
 │
@@ -404,13 +409,18 @@ uv run pytest --cov=dominionsc --cov-report=term-missing
 
 | File | What it tests | How |
 |------|---------------|-----|
-| `test_dominionsc.py` | `DominionSC`, `LoginFlow`, `DominionSCTFAHandler` | Mocks HTTP via `AsyncMock`/`patch` |
+| `test_dominionsc.py` | `DominionSC`, `DominionSCURLHandler`, `DominionSCTFAHandler` | Mocks HTTP via `AsyncMock`/`patch` |
 | `test_parsers.py` | `parse_registers()`, `parse_usage_reads()`, `parse_forecast()` | Pure/fixture-based |
 | `test_cli.py` | `build_parser()`, `run()`, `_handle_mfa()` | Mocked async |
 | `test_rates.py` | Rate plan catalog | Pure assertions |
 | `test_helpers.py` | `create_cookie_jar()` | Pure assertions |
-| `test_exceptions_coverage.py` | `__str__` formatting | Pure assertions |
-| `test_main_coverage.py` | `python -m dominionsc` entry point | Subprocess or mock |
+| `test_headers.py` | All header builder functions | Pure assertions |
+| `test_urls.py` | All URL builder functions | Pure assertions with mocked `cache_buster` |
+| `test_config.py` | `UtilityConfig`, `DEFAULT_CONFIG` | Pure assertions |
+| `test_account.py` | `AccountInfo`, `to_legacy_list()` | Pure assertions |
+| `test_transport.py` | `cache_buster()` | Pure assertions |
+| `test_exceptions_coverage.py` | Exception `__str__` formatting | Pure assertions |
+| `test_main_coverage.py` | `python -m dominionsc` entry point | Mock |
 
 ### Test fixtures
 

@@ -73,7 +73,7 @@ Log in to the Dominion Energy SC portal. This method must be called before any d
 
 | Exception | Reason |
 |-----------|--------|
-| `MfaChallenge` | TFA is required and no valid `login_data` was provided. The exception carries a `DominionSCTFAHandler` — see [DominionSCTFAHandler](#dominionsclfahandler--tfa-handler) for the TFA flow. |
+| `MfaChallenge` | TFA is required and no valid `login_data` was provided. The exception carries a `DominionSCTFAHandler` — see [DominionSCTFAHandler](#dominionsctfahandler--tfa-handler) for the TFA flow. |
 | `InvalidAuth` | Wrong username or password, or multi-account setup not supported. |
 | `CannotConnect` | Network failure or timeout. Retryable. |
 | `ApiException` | The API response structure has changed unexpectedly. |

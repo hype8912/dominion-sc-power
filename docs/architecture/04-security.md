@@ -5,7 +5,7 @@
 ```mermaid
 stateDiagram-v2
     [*] --> Unauthenticated
-    Unauthenticated --> LoggingIn: auth_login()
+    Unauthenticated --> LoggingIn: LoginFlow.execute()
     LoggingIn --> TFA_Required: MfaChallenge
     LoggingIn --> Authenticated: direct OK
     TFA_Required --> LoggingIn: submit TFA
@@ -24,7 +24,7 @@ sequenceDiagram
     participant Cookies as cookie jar (aiohttp)
     participant API as Dominion API
 
-    Client->>Auth: auth_login(email, password)
+    Client->>Auth: LoginFlow.execute(username, password)
     Auth->>Transport: POST /login
     Transport->>API: credentials
     API-->>Transport: session + MfaChallenge (if TFA enabled)

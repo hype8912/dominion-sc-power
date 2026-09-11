@@ -88,7 +88,7 @@ flowchart LR
 
 | Component | Key Symbol / Class | Responsibility |
 | --- | --- | --- |
-| `auth.py` | `auth_login()`, TFA challenge handlers | Authentication, 2FA, cookie jar persistence |
+| `auth.py` | `LoginFlow`, `DominionSCTFAHandler` | Authentication, 2FA, cookie jar persistence |
 | `client.py` | `DominionSC` | Main API facade; async methods (`async_get_usage_reads`, `async_get_accounts`, etc.) |
 | `cli.py` | `build_parser()`, `run()` | Argument parsing; CSV output; loop over accounts |
 | `transport.py` | Session wrapper | `aiohttp.ClientSession`; request/response handling |

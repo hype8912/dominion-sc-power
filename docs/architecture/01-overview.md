@@ -5,7 +5,7 @@
 - **Name:** `dominion-sc-power`
 - **Purpose:** Python library for Dominion Energy South Carolina customers to retrieve historical and forecasted energy usage and cost data.
 - **Consumer:** Home Assistant integration (`ha-dominion-sc`).
-- **Repo:** `github.com/hype8912/dominion-sc-power`
+- **Repo:** `github.com/sctigercat1/dominion-sc-power`
 
 ## Scope & Boundaries
 

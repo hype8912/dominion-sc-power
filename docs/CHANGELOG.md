@@ -61,7 +61,7 @@ are recorded here as they land on the development branch.
 - Login flow builds an `AccountInfo` model internally instead of a positional
   `[[types], addr]` list, converting to the legacy shape only at the
   `async_get_accounts()` boundary for backward compatibility.
-- Test coverage raised to ~99% (114 tests), including fixture-based parser
+- Test coverage raised to 100% (182 tests), including fixture-based parser
   tests against redacted real-structure Green Button XML.
 
 ### Known follow-ups (not yet done)

@@ -2,7 +2,7 @@
 
 ## Build & Package Structure (Grounded)
 
-- `pyproject.toml` — package metadata, dependencies (`aiohttp`, etc.), dev extras, build-system (`setuptools`/`hatch`), tool configs (`ruff`, `pytest`).
+- `pyproject.toml` — package metadata, dependencies (`aiohttp`, etc.), dev extras, build-system (`setuptools`), tool configs (`ruff`, `pytest`).
 - `uv.lock` — reproducible lockfile (27,710 bytes; committed).
 - `.venv/` — virtualenv managed by `uv`; not committed (`.gitignore`).
 - `scripts/setup` — setup helper.
