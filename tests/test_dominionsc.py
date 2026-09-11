@@ -249,7 +249,7 @@ class TestDominionSCTFAHandler:
 
     @pytest.mark.asyncio
     async def test_async_select_tfa_option_success(self, tfa_handler, mock_url_handler):
-        """Test successful TFA option selection."""
+        """Test successful TFA option selection — method, URL, and JSON body verified."""
         response = json.dumps({"data": True})
         mock_url_handler.call_api = AsyncMock(return_value=response)
 
@@ -259,6 +259,9 @@ class TestDominionSCTFAHandler:
         call_args = mock_url_handler.call_api.call_args
         assert call_args[0][0] == "post"
         assert "SendPINCode" in call_args[0][1]
+        json_body = call_args[0][3]
+        assert json_body["sendMethod"] == "***-***-1234"
+        assert json_body["_df"] == ""
 
     @pytest.mark.asyncio
     async def test_async_select_tfa_option_failure(self, tfa_handler, mock_url_handler):
@@ -432,7 +435,8 @@ class TestDominionSC:
 
         assert access_token == "access123"
         assert user_id == "user456"
-        assert "ELECTRIC" in accounts[0]
+        assert accounts[0] == ["ELECTRIC"]
+        assert accounts[1] == "ACC123"
 
     @pytest.mark.asyncio
     async def test_async_login_internal_failed_credentials(self, dominion_client):
@@ -654,6 +658,7 @@ class TestDominionSC:
 
         assert "ELECTRIC" in accounts[0]
         assert "GAS" in accounts[0]
+        assert accounts[1] == "ACC123"
 
     @pytest.mark.asyncio
     async def test_async_login_internal_empty_measurement_mappings(self, dominion_client):
@@ -1006,13 +1011,21 @@ class TestDominionSC:
         assert headers["Authorization"] == "Bearer test_token_123"
 
     def test_get_headers_without_token(self, dominion_client):
-        """Test getting headers without access token."""
+        """Test getting headers without access token — all eight keys present, no Authorization."""
         dominion_client.access_token = None
 
         headers = dominion_client._get_headers()
 
         assert "Authorization" not in headers
         assert headers["User-Agent"] == USER_AGENT
+        assert headers["IsAjax"] == "true"
+        assert headers["X-Requested-With"] == "XMLHttpRequest"
+        assert headers["Host"] == "desc-prodapi.bidgely.com"
+        assert headers["Origin"] == "https://account.dominionenergysc.com"
+        assert headers["Referer"] == "https://account.dominionenergysc.com/"
+        assert headers["X-Bidgely-Client-Type"] == "WIDGETS"
+        assert headers["X-Bidgely-Pilot-Id"] == BIDGELY_PILOT_ID
+        assert len(headers) == 8
 
     @pytest.mark.asyncio
     async def test_async_get_request_success(self, dominion_client):

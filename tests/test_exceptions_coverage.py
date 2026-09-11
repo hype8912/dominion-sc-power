@@ -14,21 +14,33 @@ def test_cannot_connect_str_with_all():
 
 
 def test_api_exception_str_with_status():
-    """Test ApiException __str__ with status set."""
+    """ApiException __str__ includes message, URL, and status when status is set."""
     exc = ApiException("msg", url="http://x", status=500)
-    assert "Status: 500" in str(exc)
+    s = str(exc)
+    assert "msg" in s
+    assert "URL: http://x" in s
+    assert "Status: 500" in s
 
 
 def test_api_exception_str_with_response_text():
-    """Test ApiException __str__ with response_text set."""
+    """ApiException __str__ includes message, URL, and response_text when response_text is set."""
     exc = ApiException("msg", url="http://x", response_text="oops")
-    assert "Response: oops" in str(exc)
+    s = str(exc)
+    assert "msg" in s
+    assert "URL: http://x" in s
+    assert "Response: oops" in s
 
 
-def test_invalid_auth():
-    """Test InvalidAuth can be instantiated."""
+def test_invalid_auth_without_message():
+    """InvalidAuth with no message produces an empty string representation."""
     exc = InvalidAuth()
     assert str(exc) == ""
+
+
+def test_invalid_auth_with_message():
+    """InvalidAuth preserves its message in the string representation."""
+    exc = InvalidAuth("bad credentials")
+    assert str(exc) == "bad credentials"
 
 
 def test_cannot_connect_defaults():
