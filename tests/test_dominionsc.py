@@ -367,7 +367,7 @@ class TestDominionSC:
 
     @pytest.mark.asyncio
     async def test_async_login_invalid_auth_401(self, dominion_client):
-        """Test login with 401 error raises CannotConnect."""
+        """A 401 ClientResponseError from the login flow is wrapped as CannotConnect."""
         error = ClientResponseError(
             request_info=Mock(),
             history=(),
@@ -379,12 +379,12 @@ class TestDominionSC:
             "_async_login_internal",
             new=AsyncMock(side_effect=error),
         ):
-            with pytest.raises(CannotConnect):
+            with pytest.raises(CannotConnect, match="Failed to connect to API"):
                 await dominion_client.async_login()
 
     @pytest.mark.asyncio
     async def test_async_login_invalid_auth_403(self, dominion_client):
-        """Test login with 403 error raises CannotConnect."""
+        """A 403 ClientResponseError from the login flow is wrapped as CannotConnect."""
         error = ClientResponseError(
             request_info=Mock(),
             history=(),
@@ -396,19 +396,19 @@ class TestDominionSC:
             "_async_login_internal",
             new=AsyncMock(side_effect=error),
         ):
-            with pytest.raises(CannotConnect):
+            with pytest.raises(CannotConnect, match="Failed to connect to API"):
                 await dominion_client.async_login()
 
     @pytest.mark.asyncio
     async def test_async_login_client_error(self, dominion_client):
-        """Test login with ClientError raises CannotConnect."""
+        """A plain ClientError from the login flow is wrapped as CannotConnect."""
         error = ClientError("Connection failed")
         with patch.object(
             dominion_client,
             "_async_login_internal",
             new=AsyncMock(side_effect=error),
         ):
-            with pytest.raises(CannotConnect):
+            with pytest.raises(CannotConnect, match="Failed to connect to API"):
                 await dominion_client.async_login()
 
     @pytest.mark.asyncio
@@ -482,14 +482,14 @@ class TestDominionSC:
 
     @pytest.mark.asyncio
     async def test_async_login_internal_no_tfa_token(self, dominion_client):
-        """Test login without TFA token raises MfaChallenge."""
+        """When the account requires TFA but no token is available, MfaChallenge is raised."""
         responses = [
             '<input name="__RequestVerificationToken" type="hidden" value="token1" />',
             '{"data": {"status": "twoFA"}}',
         ]
 
         with patch.object(DominionSCURLHandler, "call_api", new=AsyncMock(side_effect=responses)):
-            with pytest.raises(MfaChallenge):
+            with pytest.raises(MfaChallenge, match="Need new TFA token"):
                 await dominion_client._async_login_internal(dominion_client.session, "test_user", "test_pass")
 
     @pytest.mark.asyncio
@@ -949,7 +949,10 @@ class TestDominionSC:
             end_date=end_date,
         )
 
+        # Non-interval entry is skipped; only the two interval readings are returned
         assert len(usage_reads) == 2
+        consumptions = sorted(r.consumption for r in usage_reads)
+        assert consumptions == [500, 600]
 
     @pytest.mark.asyncio
     async def test_async_get_usage_reads_xml_parse_error(self, dominion_client):
