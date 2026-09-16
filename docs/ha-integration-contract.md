@@ -33,6 +33,8 @@ async with aiohttp.ClientSession(cookie_jar=create_cookie_jar()) as session:
     client = DominionSC(session, username, password, login_data=saved_tfa_data)
 ```
 
+**Optional `pilot_id` override:** `DominionSC` also accepts a `pilot_id: str | None = None` keyword argument that overrides the Bidgely multi-tenant pilot ID (`const.BIDGELY_PILOT_ID`) for this instance. The HA integration should only need this if Dominion re-routes an account to a different Bidgely pipeline; leave it unset otherwise.
+
 **HA note:** The library docstring for `DominionSC.__init__` states *"Do not modify default headers since Home Assistant that uses this library needs to use a default session for all integrations."* The library adds headers per-request rather than on the session, specifically to avoid interfering with HA's shared session pattern.
 
 ---

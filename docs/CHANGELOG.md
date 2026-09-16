@@ -3,10 +3,20 @@
 All notable changes to this project are documented here.
 
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
-This project has not yet cut a versioned release for the changes below; they
-are recorded here as they land on the development branch.
+Changes are recorded under `Unreleased` as they land on the development
+branch, then moved under a version heading once `pyproject.toml`'s version is
+bumped for a release.
 
 ## Unreleased
+
+### Added
+
+- `pilot_id` constructor parameter on `DominionSC`: allows callers (e.g. the
+  Home Assistant integration) to override the Bidgely multi-tenant pilot ID
+  per-instance instead of relying solely on the hardcoded
+  `const.BIDGELY_PILOT_ID`. Falls back to the library default when not given.
+
+## [0.1.0] - 2026-09-14
 
 ### Added
 

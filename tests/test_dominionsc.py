@@ -351,6 +351,29 @@ class TestDominionSC:
         """Test initialization with login_data."""
         assert dominion_client.login_data == {"token": "test_token"}
 
+    def test_init_default_pilot_id(self, mock_session):
+        """Test that pilot_id defaults to BIDGELY_PILOT_ID when not overridden."""
+        client = DominionSC(
+            session=mock_session,
+            username="user",
+            password="pass",
+        )
+
+        assert client.pilot_id == BIDGELY_PILOT_ID
+        assert client._config.pilot_id == BIDGELY_PILOT_ID
+
+    def test_init_pilot_id_override(self, mock_session):
+        """Test that an explicit pilot_id overrides the default."""
+        client = DominionSC(
+            session=mock_session,
+            username="user",
+            password="pass",
+            pilot_id="00001",
+        )
+
+        assert client.pilot_id == "00001"
+        assert client._config.pilot_id == "00001"
+
     @pytest.mark.asyncio
     async def test_async_login_success(self, dominion_client):
         """Test successful login."""

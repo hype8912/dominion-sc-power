@@ -162,7 +162,7 @@ registers = await client.async_get_register_reads("ELECTRIC", start, end)
 
 ### Step 1: Construction (`DominionSC.__init__`)
 
-`DominionSC` stores credentials and creates a `UtilityConfig` object. The config is the single carrier of endpoint hostnames, the Bidgely pilot ID, the timezone, and the User-Agent string. Nothing else in the library holds these as local variables.
+`DominionSC` stores credentials and creates a `UtilityConfig` object. The config is the single carrier of endpoint hostnames, the Bidgely pilot ID, the timezone, and the User-Agent string. Nothing else in the library holds these as local variables. The constructor accepts an optional `pilot_id: str | None = None` argument that overrides `UtilityConfig.pilot_id` (and thus `const.BIDGELY_PILOT_ID`) for that instance; when omitted, the library's default pilot ID is used.
 
 ### Step 2: Login (`async_login`)
 

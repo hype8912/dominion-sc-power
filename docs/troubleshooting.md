@@ -219,6 +219,7 @@ This guide covers common errors, their root causes, and how to resolve them.
 **Fix:**
 1. Verify `BIDGELY_PILOT_ID = "10078"` in `src/dominionsc/const.py`.
 2. If the value is correct but the issue persists, capture the `gb-download` request URL from your browser's DevTools while logged into the Dominion portal and check which pilot ID appears in the `X-Bidgely-Pilot-Id` request header.
+3. If your account needs a different pilot ID than the library default (e.g. a distinct Bidgely pipeline), pass the correct value directly instead of patching `const.py`: `DominionSC(session, username, password, pilot_id="<correct_id>")`.
 
 ---
 

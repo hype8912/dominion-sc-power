@@ -9,7 +9,7 @@
 
 ## Scope & Boundaries
 
-- **In scope:** Async `aiohttp` client; login + TFA; usage/cost retrieval by register (`ESPI UsagePoint`); forecast model; CSV/CLI output; multi-meter-netting support.
+- **In scope:** Async `aiohttp` client; login + TFA; usage/cost retrieval by register (`ESPI UsagePoint`); forecast model; CSV/CLI output; multi-meter-netting support; a declarative residential rate plan catalog (`rates.py`).
 - **Explicit limits (from README):** One service address per account; TFA required; data delayed 24–48 hours.
 
 ## High-Level Component Diagram
@@ -27,8 +27,9 @@ flowchart TB
         Transport["transport.py — aiohttp session"]
         URLs["urls.py — endpoint definitions"]
         Parsers["parsers/greenbutton.py + forecast.py"]
-        Models["models/account, forecast, register_reads, usage_read"]
+        Models["models/account, forecast, register_reads, usage_read, rate_plan"]
         Config["config.py / const.py"]
+        Rates["rates.py — rate plan catalog"]
     end
 
     CLI --> Client
@@ -39,6 +40,7 @@ flowchart TB
     Parsers --> Models
     Auth --> Config
     Client --> Config
+    Rates --> Models
 
     Transport <---> Dominion_API
 ```
@@ -50,6 +52,7 @@ flowchart TB
 - **Parser separation:** `parsers/greenbutton.py` for historical usage; `parsers/forecast.py` for bill forecasts.
 - **Register-level reads:** `register_reads.py` distinguishes grid-delivery vs solar-export (negative values) via `UsagePoint` id.
 - **CLI extracted** from `__main__.py` into `cli.py` (see `REFACTOR_PLAN.md` Phase 5, finding F9 fix).
+- **Rate plans as data:** `rates.py` declares the residential tariff catalog using a discriminated union of frozen charge dataclasses (`models/rate_plan.py`) rather than parsed/fetched data — no network call is involved.
 
 ## Technology Stack
 

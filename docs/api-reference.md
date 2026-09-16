@@ -37,6 +37,7 @@ DominionSC(
     username: str,
     password: str,
     login_data: dict[str, str] | None = None,
+    pilot_id: str | None = None,
 )
 ```
 
@@ -48,6 +49,7 @@ DominionSC(
 | `username` | `str` | The email address or username for `account.dominionenergysc.com`. |
 | `password` | `str` | The account password. |
 | `login_data` | `dict[str, str] \| None` | Optional saved TFA token from a previous successful MFA flow. Pass `{"tfa_token": "<token>"}` to skip interactive TFA. Default: `None`. |
+| `pilot_id` | `str \| None` | Override for the Bidgely multi-tenant pilot ID (see `const.BIDGELY_PILOT_ID`). Defaults to the library's known-good value for Dominion Energy SC; only needs overriding if Dominion re-routes accounts to a different Bidgely pipeline. Default: `None`. |
 
 **Important:** Always create the session with `cookie_jar=create_cookie_jar()`:
 

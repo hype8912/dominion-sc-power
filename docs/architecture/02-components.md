@@ -18,6 +18,7 @@ src/dominionsc/
   forecast.py          # forecast data helper (317 bytes)
   helpers.py           # utility functions (191 bytes)
   usage_read.py        # usage read helpers (327 bytes)
+  rates.py             # declarative residential rate plan catalog
   __main__.py          # entry point delegating to cli.run()
 
   models/
@@ -25,6 +26,7 @@ src/dominionsc/
     forecast.py        # Forecast model (425 bytes)
     register_reads.py  # Per-register read model (1,682 bytes)
     usage_read.py      # Usage read model (355 bytes)
+    rate_plan.py       # RatePlan type system (discriminated Charge union)
     __init__.py
 
   parsers/
@@ -52,6 +54,7 @@ flowchart LR
         ForecastMod["forecast.py"]
         Helpers["helpers.py"]
         UsageReadMod["usage_read.py"]
+        Rates["rates.py"]
         Main["__main__.py"]
     end
 
@@ -60,6 +63,7 @@ flowchart LR
         M_Forecast["forecast.py"]
         M_RegReads["register_reads.py"]
         M_Usage["usage_read.py"]
+        M_RatePlan["rate_plan.py"]
     end
 
     subgraph Parsers["parsers/"]
@@ -82,6 +86,7 @@ flowchart LR
     Auth --> Exceptions
     Parsers --> Models
     Main --> CLI
+    Rates --> M_RatePlan
 ```
 
 ## Component Responsibilities
@@ -95,4 +100,6 @@ flowchart LR
 | `urls.py` | URL builder functions | Endpoint paths for usage, forecast, account endpoints |
 | `parsers/greenbutton.py` | XML parser | Parses ESPI `UsagePoint` XML into register-level reads |
 | `parsers/forecast.py` | Forecast parser | Parses forecast responses into cost/projections |
-| `models/` | Data classes / typed dicts | Structured output (`AccountInfo`, `UsagePoint` reads, forecasts) |
+| `models/` | Data classes / typed dicts | Structured output (`AccountInfo`, `UsagePoint` reads, forecasts, `RatePlan`) |
+| `rates.py` | `RATE_2`...`RATE_8`, `RATE_32S`, `RATE_32V` | Declarative, hard-coded residential tariff catalog; no network calls |
+| `models/rate_plan.py` | `RatePlan`, `Charge` union | Discriminated-union type system (`DailyCharge`, `TieredUsageCharge`, `TimeOfUseCharge`, `DemandCharge`, etc.) backing the rate catalog |
