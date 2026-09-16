@@ -39,8 +39,23 @@ class DominionSC:
         username: str,
         password: str,
         login_data: dict[str, str] | None = None,  # {token: tfa_token}
+        pilot_id: str | None = None,
     ) -> None:
-        """Initialize."""
+        """Initialize.
+
+        Args:
+            session:    Shared aiohttp session (see note below on why it is
+                        not mutated with default headers).
+            username:   Dominion Energy SC account username/email.
+            password:   Dominion Energy SC account password.
+            login_data: Cached TFA session token from a prior login, if any.
+            pilot_id:   Override for the Bidgely multi-tenant pilot ID (see
+                        ``const.BIDGELY_PILOT_ID``). Defaults to the library's
+                        known-good value for Dominion Energy SC; only needs
+                        overriding if Dominion re-routes accounts to a
+                        different Bidgely pipeline.
+
+        """
         # Note: Do not modify default headers since Home Assistant that uses this library needs to use
         # a default session for all integrations. Instead specify the headers for each request.
         self.session: aiohttp.ClientSession = session
@@ -62,12 +77,16 @@ class DominionSC:
         # the headers/urls/auth helper modules. The individual attributes
         # above are kept alongside this for backwards compatibility
         # (existing callers, including ha-dominion-sc, read them directly).
-        self._config = UtilityConfig(
-            name=self._name,
-            dominion_endpoint=self._dominion_endpoint,
-            bidgely_endpoint=self.bidgely_endpoint,
-            timezone=self.timezone,
-        )
+        config_kwargs: dict[str, str] = {
+            "name": self._name,
+            "dominion_endpoint": self._dominion_endpoint,
+            "bidgely_endpoint": self.bidgely_endpoint,
+            "timezone": self.timezone,
+        }
+        if pilot_id:
+            config_kwargs["pilot_id"] = pilot_id
+        self._config = UtilityConfig(**config_kwargs)
+        self.pilot_id: str = self._config.pilot_id
 
     def _find_verification_token(self, webpage: str, path: str, funct: str) -> str | None:
         """Find and extract the verification token from a webpage.
