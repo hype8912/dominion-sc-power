@@ -568,6 +568,7 @@ Dominion Energy SC's published tariffs define summer as **June through September
 
 ```python
 from dominionsc import (
+    RATE_1,
     RATE_2,
     RATE_5,
     RATE_6,
@@ -585,6 +586,7 @@ from dominionsc import (
 
 | Constant | Code | Name |
 |----------|------|------|
+| `RATE_1` | `"rate_1"` | Rate 1 — Residential Service: Good Cents Rate (tiered; closed to new customers since 1996, grandfathered dwellings only) |
 | `RATE_2` | `"rate_2"` | Rate 2 — Low Use Residential Service (flat rate, ≤400 kWh/month) |
 | `RATE_5` | `"rate_5"` | Rate 5 — Residential Service: Time of Use |
 | `RATE_6` | `"rate_6"` | Rate 6 — Residential Service: Energy Saver/Conservation Rate (tiered, energy-efficient homes) |

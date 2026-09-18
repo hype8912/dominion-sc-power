@@ -333,7 +333,7 @@ Declarative, hard-coded definitions of all current Dominion Energy SC residentia
 
 | Name | Contents |
 |------|----------|
-| `RESIDENTIAL_ELECTRIC_RATE_PLANS` | Rate 2, 5, 6, 7, 8 — keyed by code string |
+| `RESIDENTIAL_ELECTRIC_RATE_PLANS` | Rate 1, 2, 5, 6, 7, 8 — keyed by code string |
 | `RESIDENTIAL_GAS_RATE_PLANS` | Rate 32S, 32V — keyed by code string |
 | `RESIDENTIAL_RATE_PLANS` | All of the above merged |
 
@@ -343,6 +343,7 @@ Declarative, hard-coded definitions of all current Dominion Energy SC residentia
 
 | Constant | Code | Commodity | Summary |
 |----------|------|-----------|---------|
+| `RATE_1` | `"rate_1"` | Electric | Good Cents — tiered rate; closed to new customers since January 15, 1996, only previously certified dwellings remain eligible |
 | `RATE_2` | `"rate_2"` | Electric | Low Use — flat rate; requires ≤400 kWh each of the prior 12 billing periods |
 | `RATE_5` | `"rate_5"` | Electric | Time of Use — three price tiers by time-of-day, varies summer/winter |
 | `RATE_6` | `"rate_6"` | Electric | Energy Saver — tiered rate for energy-efficient homes meeting insulation/equipment requirements |

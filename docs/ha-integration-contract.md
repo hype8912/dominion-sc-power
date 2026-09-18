@@ -134,13 +134,14 @@ forecast = await client.async_get_forecast()
 from dominionsc import Forecast
 from datetime import date
 
+
 @dataclass
 class Forecast:
-    start_date: date          # First day of current billing period
-    end_date: date            # Projected last day of billing period
-    current_date: date        # Most recent date included in cost_to_date
-    cost_to_date: float       # Dollars spent from start_date through current_date
-    forecasted_cost: float    # Projected total bill for the full period
+    start_date: date  # First day of current billing period
+    end_date: date  # Projected last day of billing period
+    current_date: date  # Most recent date included in cost_to_date
+    cost_to_date: float  # Dollars spent from start_date through current_date
+    forecasted_cost: float  # Projected total bill for the full period
     typical_cost: float | None  # Last year's equivalent period total; None if unavailable
 ```
 
@@ -171,9 +172,9 @@ class Forecast:
 
 ```python
 registers = await client.async_get_register_reads(
-    account,      # str: "ELECTRIC" or "GAS"
-    start_date,   # datetime — time component ignored, floored to midnight local
-    end_date,     # datetime — time component ignored, floored to midnight local
+    account,  # str: "ELECTRIC" or "GAS"
+    start_date,  # datetime — time component ignored, floored to midnight local
+    end_date,  # datetime — time component ignored, floored to midnight local
 )
 # returns: list[RegisterReads]
 ```
@@ -185,9 +186,9 @@ Each `RegisterReads` in the list corresponds to one physical meter register (ESP
 ```python
 @dataclass
 class RegisterReads:
-    usage_point_id: str            # Stable ESPI UsagePoint ID (safe as a persistent key)
-    flow_direction: str | None     # UNRELIABLE — do not use to identify register type
-    reads: list[UsageRead]         # Interval readings for this register
+    usage_point_id: str  # Stable ESPI UsagePoint ID (safe as a persistent key)
+    flow_direction: str | None  # UNRELIABLE — do not use to identify register type
+    reads: list[UsageRead]  # Interval readings for this register
 ```
 
 Each `UsageRead` inside `reads`:
@@ -195,9 +196,9 @@ Each `UsageRead` inside `reads`:
 ```python
 @dataclass
 class UsageRead:
-    start_time: datetime    # Timezone-aware, in the utility's local timezone
-    end_time: datetime      # Timezone-aware, inclusive (end = start + duration - 1 second)
-    consumption: float      # Wh (electric) or ft³ (gas); negative for solar export
+    start_time: datetime  # Timezone-aware, in the utility's local timezone
+    end_time: datetime  # Timezone-aware, inclusive (end = start + duration - 1 second)
+    consumption: float  # Wh (electric) or ft³ (gas); negative for solar export
 ```
 
 ### How many RegisterReads will the HA integration receive?
@@ -278,12 +279,17 @@ The library ships a read-only catalog of current Dominion Energy SC residential 
 from dominionsc import (
     get_rate_plan,
     get_available_rate_plans,
-    RESIDENTIAL_RATE_PLANS,       # all plans keyed by code
+    RESIDENTIAL_RATE_PLANS,  # all plans keyed by code
     RESIDENTIAL_ELECTRIC_RATE_PLANS,
     RESIDENTIAL_GAS_RATE_PLANS,
     # Individual plan constants (if needed):
-    RATE_2, RATE_5, RATE_6, RATE_7, RATE_8,   # electric
-    RATE_32S, RATE_32V,                         # gas
+    RATE_2,
+    RATE_5,
+    RATE_6,
+    RATE_7,
+    RATE_8,  # electric
+    RATE_32S,
+    RATE_32V,  # gas
 )
 ```
 
@@ -388,8 +394,7 @@ except CannotConnect as err:
     # Mark entities unavailable, schedule retry
 except ApiException as err:
     _LOGGER.error(
-        "Dominion API response changed. Library update may be required. "
-        "url=%s response=%s", err.url, err.response_text
+        "Dominion API response changed. Library update may be required. url=%s response=%s", err.url, err.response_text
     )
     # Mark entities unavailable
 except InvalidAuth:

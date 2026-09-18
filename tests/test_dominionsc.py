@@ -1020,6 +1020,29 @@ class TestDominionSC:
                 end_date=end_date,
             )
 
+    @pytest.mark.asyncio
+    async def test_async_get_usage_reads_requires_dates(self, dominion_client):
+        """Omitting start_date or end_date raises ValueError instead of crashing on None."""
+        dominion_client.user_id = "user_123"
+
+        with pytest.raises(ValueError, match="start_date and end_date are required"):
+            await dominion_client.async_get_usage_reads(account="ELECTRIC", end_date=datetime(2025, 2, 2))
+
+        with pytest.raises(ValueError, match="start_date and end_date are required"):
+            await dominion_client.async_get_usage_reads(account="ELECTRIC", start_date=datetime(2025, 2, 1))
+
+    @pytest.mark.asyncio
+    async def test_async_get_usage_reads_requires_login(self, dominion_client):
+        """Calling before async_login() (no user_id) raises InvalidAuth."""
+        assert dominion_client.user_id is None
+
+        with pytest.raises(InvalidAuth, match="not logged in"):
+            await dominion_client.async_get_usage_reads(
+                account="ELECTRIC",
+                start_date=datetime(2025, 2, 1),
+                end_date=datetime(2025, 2, 2),
+            )
+
     def test_get_headers_with_token(self, dominion_client):
         """Test getting headers with access token."""
         dominion_client.access_token = "test_token_123"
@@ -1088,7 +1111,7 @@ class TestDominionSC:
     async def test_cannot_connect_exception_attributes(self, dominion_client):
         """Test CannotConnect exception has proper attributes."""
         error = ClientError("Network error")
-        error.status = 500
+        error.status = 500  # ty: ignore[unresolved-attribute]
         dominion_client.session.get = Mock(side_effect=error)
 
         with pytest.raises(CannotConnect) as exc_info:
@@ -1154,7 +1177,7 @@ class TestDominionSC:
         from dominionsc.auth import find_verification_token
 
         with pytest.raises(CannotConnect, match="Cannot retrieve"):
-            find_verification_token(None, "/t", "f")
+            find_verification_token(None, "/t", "f")  # ty: ignore[invalid-argument-type]
 
     def test_find_verification_token_split_exception_covers_lines_34_35(self):
         """Cover lines 34-35: exception during token split in find_verification_token."""
@@ -1241,6 +1264,29 @@ class TestDominionSC:
         dominion_client.session.get = Mock(side_effect=ClientError("Network error"))
 
         with pytest.raises(CannotConnect, match="Failed to connect to API"):
+            await dominion_client.async_get_register_reads(
+                account="ELECTRIC",
+                start_date=datetime(2025, 2, 1),
+                end_date=datetime(2025, 2, 2),
+            )
+
+    @pytest.mark.asyncio
+    async def test_async_get_register_reads_requires_dates(self, dominion_client):
+        """Omitting start_date or end_date raises ValueError instead of crashing on None."""
+        dominion_client.user_id = "user_123"
+
+        with pytest.raises(ValueError, match="start_date and end_date are required"):
+            await dominion_client.async_get_register_reads(account="ELECTRIC", end_date=datetime(2025, 2, 2))
+
+        with pytest.raises(ValueError, match="start_date and end_date are required"):
+            await dominion_client.async_get_register_reads(account="ELECTRIC", start_date=datetime(2025, 2, 1))
+
+    @pytest.mark.asyncio
+    async def test_async_get_register_reads_requires_login(self, dominion_client):
+        """Calling before async_login() (no user_id) raises InvalidAuth."""
+        assert dominion_client.user_id is None
+
+        with pytest.raises(InvalidAuth, match="not logged in"):
             await dominion_client.async_get_register_reads(
                 account="ELECTRIC",
                 start_date=datetime(2025, 2, 1),

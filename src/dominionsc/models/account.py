@@ -27,7 +27,7 @@ class AccountInfo:
     service_address_and_account_no: str = ""
     """Service address and account number string, e.g. '123 MAIN ST (*-****-****0-4464)'."""
 
-    def to_legacy_list(self) -> list:
+    def to_legacy_list(self) -> list[list[str] | str]:
         """Convert to the old positional [[types], addr] format.
 
         Keeps async_get_accounts() backward-compatible with ha-dominion-sc,

@@ -14,6 +14,36 @@ This library is used by the custom [Home Assistant Integration for Dominion Ener
 - Async/await architecture using aiohttp
 - Support for multiple energy sources (electric and gas)
 
+## Supported Rate Plans
+
+The library ships declarative pricing for the following Dominion Energy SC
+residential tariffs (see [`src/dominionsc/rates.py`](src/dominionsc/rates.py)):
+
+**Electric**
+
+| Code | Name |
+|------|------|
+| `rate_1` | Rate 1 - Residential Service: Good Cents Rate (closed to new customers since 1996) |
+| `rate_2` | Rate 2 - Low Use Residential Service |
+| `rate_5` | Rate 5 - Residential Service: Time of Use |
+| `rate_6` | Rate 6 - Residential Service: Energy Saver/Conservation Rate |
+| `rate_7` | Rate 7 - Residential Service: Time-of-Use Demand |
+| `rate_8` | Rate 8 - Residential Service |
+
+**Natural Gas**
+
+| Code | Name |
+|------|------|
+| `rate_32s` | Rate 32S - Gas Residential Standard Service |
+| `rate_32v` | Rate 32V - Gas Residential Value Service |
+
+```python
+from dominionsc import get_rate_plan, get_available_rate_plans
+
+plan = get_rate_plan("rate_8")
+print(plan.name)  # "Rate 8 - Residential Service"
+```
+
 ## Limitations
 
 - Only one service address per Dominion account is currently supported (mainly because I do not know what the API responses look like for users with multiple service addresses) - you will get an error if this applies to you - please report the error under issues which should include the relevant API response
@@ -28,67 +58,11 @@ pip install dominion-sc-power
 
 ## Development
 
-Development uses [uv](https://docs.astral.sh/uv/) to manage the Python
-virtual environment and dependencies. Install Python 3.11 or newer and uv
-before starting. The committed `uv.lock` file keeps development installs
-reproducible.
-
-### Setup Development Environment
-
-```bash
-# Clone the repository
-git clone https://github.com/sctigercat1/dominion-sc-power.git
-cd dominion-sc-power
-
-# Create .venv and install the package plus development dependencies
-uv sync --extra dev
-```
-
-The equivalent setup script is:
-
-```bash
-./scripts/setup
-```
-
-You can run commands without activating the environment by prefixing them
-with `uv run`:
-
-```bash
-uv run python -m dominionsc --help
-uv run pytest
-uv run ruff check .
-```
-
-To activate the environment for a shell session, run
-`source .venv/bin/activate` on macOS/Linux or `.venv\\Scripts\\activate` on
-Windows.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for dependency-management guidance,
-project conventions, testing details, and the complete developer workflow.
-
-### Code Validation
-
-After each change, run the repository scripts. The scripts use the project
-virtual environment when it exists:
-
-```bash
-./scripts/lint
-./scripts/test
-```
-
-The direct uv equivalents are:
-
-```bash
-uv run ruff format .
-uv run ruff check . --fix
-uv run pytest
-```
-
-### Contributing
-
-Contributions are welcome! Please submit a pull request with your proposed
-changes. Before opening a pull request, update `uv.lock` when dependencies
-change and run the lint and test commands above.
+Contributions are welcome! For environment setup, the daily development
+workflow, testing, and the complete contribution checklist, see
+[CONTRIBUTING.md](CONTRIBUTING.md). For an in-depth tour of how the library
+is structured and how its pieces fit together, see the
+[Developer Guide](docs/developer-guide.md).
 
 ## Command Line Interface
 
@@ -213,24 +187,24 @@ try:
     await client.async_login()
 except MfaChallenge as e:
     handler = e.handler
-    
+
     # Get available TFA options
     options = await handler.async_get_tfa_options()
     print("Available TFA methods:", options)
-    
+
     # Select an option (e.g., SMS or email)
     option_id = list(options.keys())[0]
     await handler.async_select_tfa_option(option_id)
-    
+
     # Get code from user
     code = input("Enter the security code: ")
-    
+
     # Submit code and get login data for future use
     login_data = await handler.async_submit_tfa_code(code)
-    
+
     # Save login_data to skip TFA next time
     # Pass it as: DominionSC(session, username, password, login_data)
-    
+
     # Retry login
     client.login_data = login_data
     await client.async_login()

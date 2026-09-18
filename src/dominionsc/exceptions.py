@@ -18,13 +18,13 @@ class CannotConnect(Exception):
     ) -> None:
         """Initialize the exception."""
         super().__init__(message)
-        self.url = url
-        self.status = status
-        self.response_text = response_text
+        self.url: str | None = url
+        self.status: int | None = status
+        self.response_text: str | None = response_text
 
     def __str__(self) -> str:
         """Return a string representation of the exception."""
-        parts = [super().__str__()]
+        parts: list[str] = [super().__str__()]
         if self.url is not None:
             parts.append(f"URL: {self.url}")
         if self.status is not None:
@@ -44,7 +44,7 @@ class MfaChallenge(Exception):
     def __init__(self, message: str, handler: "DominionSCTFAHandler") -> None:
         """Initialize the exception."""
         super().__init__(message)
-        self.handler = handler
+        self.handler: DominionSCTFAHandler = handler
 
 
 class ApiException(Exception):
@@ -53,7 +53,7 @@ class ApiException(Exception):
     def __init__(
         self,
         message: str,
-        url: str,
+        url: str | None = None,
         status: int | None = None,
         response_text: str | None = None,
     ) -> None:
@@ -66,7 +66,8 @@ class ApiException(Exception):
     def __str__(self) -> str:
         """Return a string representation of the exception."""
         parts = [super().__str__()]
-        parts.append(f"URL: {self.url}")
+        if self.url is not None:
+            parts.append(f"URL: {self.url}")
         if self.status is not None:
             parts.append(f"Status: {self.status}")
         if self.response_text is not None:

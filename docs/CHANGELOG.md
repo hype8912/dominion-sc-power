@@ -11,6 +11,15 @@ bumped for a release.
 
 ### Added
 
+- `py.typed` marker (PEP 561): the package now ships inline type information,
+  so consumers get proper static type checking against `dominionsc` instead
+  of falling back to `Any` everywhere. `RegisterReads` is now also
+  re-exported from the top-level `dominionsc` package (previously only
+  reachable via `dominionsc.models`), matching `Forecast` and `UsageRead`.
+- `RATE_1` in `dominionsc.rates`: Rate 1 — Residential Service: Good Cents
+  Rate. Closed to new customers since January 15, 1996; only dwellings
+  already certified under the Good Cents Program may remain on it. Current
+  pricing matches `RATE_6`'s seasonal tiered schedule.
 - `pilot_id` constructor parameter on `DominionSC`: allows callers (e.g. the
   Home Assistant integration) to override the Bidgely multi-tenant pilot ID
   per-instance instead of relying solely on the hardcoded

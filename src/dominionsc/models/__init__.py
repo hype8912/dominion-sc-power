@@ -29,7 +29,7 @@ from .rate_plan import (
 from .register_reads import RegisterReads
 from .usage_read import UsageRead
 
-__all__ = [
+__all__: list[str] = [
     "AccountInfo",
     "Adjustment",
     "Charge",

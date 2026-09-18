@@ -40,7 +40,7 @@ def dominion_ajax_headers(
     (before the authenticated home-page reload); pass None to omit it,
     matching the original code's ``del headers1["Origin"]`` step.
     """
-    result = {
+    result: dict[str, str] = {
         "User-Agent": config.user_agent,
         "__RequestVerificationToken": verification_token,
         "IsAjax": "true",
@@ -55,13 +55,13 @@ def dominion_ajax_headers(
 
 def bidgely_headers(config: UtilityConfig, access_token: str | None = None) -> dict[str, str]:
     """Headers for a Bidgely request (login token exchange or gb-download)."""
-    result = {
+    result: dict[str, str] = {
         "User-Agent": config.user_agent,
         "IsAjax": "true",
         "X-Requested-With": "XMLHttpRequest",
         "Host": "desc-prodapi.bidgely.com",
-        "Origin": "https://account.dominionenergysc.com",
-        "Referer": "https://account.dominionenergysc.com/",
+        "Origin": config.dominion_endpoint,
+        "Referer": config.dominion_home_referer,
         "X-Bidgely-Client-Type": "WIDGETS",
         "X-Bidgely-Pilot-Id": config.pilot_id,
     }

@@ -62,6 +62,6 @@ def test_mfa_challenge():
     class FakeHandler:
         pass
 
-    exc = MfaChallenge("challenge", handler=FakeHandler())
+    exc = MfaChallenge("challenge", handler=FakeHandler())  # ty: ignore[invalid-argument-type]
     assert exc.args[0] == "challenge"
     assert isinstance(exc.handler, FakeHandler)

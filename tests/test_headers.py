@@ -69,9 +69,10 @@ def test_bidgely_headers_without_token_omits_authorization():
     assert headers["IsAjax"] == "true"
     assert headers["X-Requested-With"] == "XMLHttpRequest"
     assert headers["Host"] == "desc-prodapi.bidgely.com"
-    # Origin and Referer are hardcoded to the Dominion portal, not the Bidgely endpoint
-    assert headers["Origin"] == "https://account.dominionenergysc.com"
-    assert headers["Referer"] == "https://account.dominionenergysc.com/"
+    # Origin and Referer point at the Dominion portal (config.dominion_endpoint),
+    # not the Bidgely endpoint -- and follow dominion_endpoint if it's overridden.
+    assert headers["Origin"] == _CONFIG.dominion_endpoint
+    assert headers["Referer"] == _CONFIG.dominion_home_referer
     assert headers["X-Bidgely-Client-Type"] == "WIDGETS"
     assert headers["X-Bidgely-Pilot-Id"] == "99999"
     assert len(headers) == 8

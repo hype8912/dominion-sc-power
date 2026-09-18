@@ -74,8 +74,10 @@ from .models.rate_plan import (
     UsageTier,
     UsageUnit,
 )
+from .models.register_reads import RegisterReads
 from .models.usage_read import UsageRead
 from .rates import (
+    RATE_1,
     RATE_2,
     RATE_5,
     RATE_6,
@@ -90,7 +92,8 @@ from .rates import (
     get_rate_plan,
 )
 
-__all__ = [
+__all__: list[str] = [
+    "RATE_1",
     "RATE_2",
     "RATE_5",
     "RATE_6",
@@ -117,6 +120,7 @@ __all__ = [
     "MfaChallenge",
     "MonthlyCharge",
     "RatePlan",
+    "RegisterReads",
     "Season",
     "TieredUsageCharge",
     "TimeOfUseCharge",

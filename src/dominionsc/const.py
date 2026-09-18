@@ -5,7 +5,9 @@ meant to be imported directly by library users. Update them here if the
 upstream servers stop accepting the current values.
 """
 
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+USER_AGENT: str = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+)
 """Browser User-Agent string sent with every HTTP request.
 
 Dominion Energy SC's portal returns different page content (or blocks
@@ -26,4 +28,4 @@ rejected. You can capture the current value from browser DevTools
 # multi-tenant setup and may not be correct for every Dominion Energy SC
 # customer -- ideally this would be discovered dynamically per-account rather
 # than hardcoded at all.
-BIDGELY_PILOT_ID = "10078"
+BIDGELY_PILOT_ID: str = "10078"

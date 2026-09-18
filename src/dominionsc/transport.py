@@ -17,6 +17,8 @@ path; unifying it requires updating those tests and is deferred.
 """
 
 import time
+from collections.abc import Callable, Mapping
+from typing import Any
 
 import aiohttp
 
@@ -38,14 +40,18 @@ class DominionSCURLHandler:
 
     def __init__(self, session: aiohttp.ClientSession, timeout: aiohttp.ClientTimeout | float | None = None) -> None:
         """Initialize the handler."""
-        self._session = session
-        self._timeout = timeout if timeout is not None else aiohttp.ClientTimeout(total=30)
+        self._session: aiohttp.ClientSession = session
+        self._timeout: aiohttp.ClientTimeout
+        if isinstance(timeout, aiohttp.ClientTimeout):
+            self._timeout = timeout
+        else:
+            self._timeout = aiohttp.ClientTimeout(total=timeout if timeout is not None else 30)
 
     async def call_api(
-        self, method: str, url: str, headers: dict[str, str], json_data: dict[str, str] | None = None
-    ) -> str | None:
+        self, method: str, url: str, headers: dict[str, str], json_data: Mapping[str, str | bool] | None = None
+    ) -> str:
         """Return the result of an api call."""
-        api_func = None
+        api_func: Callable[..., Any]
         if method == "post":
             api_func = self._session.post
         elif method == "get":
@@ -55,7 +61,7 @@ class DominionSCURLHandler:
 
         try:
             async with api_func(url, json=json_data, headers=headers, timeout=self._timeout) as resp:
-                result = await resp.text(encoding="utf-8")
+                result: str = await resp.text(encoding="utf-8")
         except aiohttp.ClientError as err:
             raise CannotConnect(
                 "Failed to make an API call due to network error.",

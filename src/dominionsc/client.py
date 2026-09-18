@@ -64,31 +64,24 @@ class DominionSC:
         self.login_data: dict[str, str] = login_data or {}
         self.access_token: str | None = None
         self.user_id: str | None = None
-        self.accounts: list[str] = []
+        self.accounts: list[list[str] | str] = []
 
         # Utility configuration (formerly in DominionSCUtility)
         self._tfa_secret: str | None = None
-        self._name: str = "Dominion Energy SC"
-        self._dominion_endpoint: str = "https://account.dominionenergysc.com"
-        self.bidgely_endpoint: str = "https://desc-prodapi.bidgely.com"
-        self.timezone: str = "America/New_York"
 
         # Single source of truth for endpoints/pilot id/user agent, used by
-        # the headers/urls/auth helper modules. The individual attributes
-        # above are kept alongside this for backwards compatibility
-        # (existing callers, including ha-dominion-sc, read them directly).
-        config_kwargs: dict[str, str] = {
-            "name": self._name,
-            "dominion_endpoint": self._dominion_endpoint,
-            "bidgely_endpoint": self.bidgely_endpoint,
-            "timezone": self.timezone,
-        }
-        if pilot_id:
-            config_kwargs["pilot_id"] = pilot_id
-        self._config = UtilityConfig(**config_kwargs)
+        # the headers/urls/auth helper modules. self._dominion_endpoint,
+        # self.bidgely_endpoint, and self.timezone below mirror its values
+        # for backwards compatibility (existing callers, including
+        # ha-dominion-sc, read them directly) -- they are derived from it,
+        # not a second, independently hardcoded copy of its defaults.
+        self._config: UtilityConfig = UtilityConfig(pilot_id=pilot_id) if pilot_id else UtilityConfig()
+        self._dominion_endpoint: str = self._config.dominion_endpoint
+        self.bidgely_endpoint: str = self._config.bidgely_endpoint
+        self.timezone: str = self._config.timezone
         self.pilot_id: str = self._config.pilot_id
 
-    def _find_verification_token(self, webpage: str, path: str, funct: str) -> str | None:
+    def _find_verification_token(self, webpage: str, path: str, funct: str) -> str:
         """Find and extract the verification token from a webpage.
 
         Thin wrapper kept for backward compatibility -- the actual
@@ -119,7 +112,7 @@ class DominionSC:
 
     async def _async_login_internal(
         self, session: aiohttp.ClientSession, username: str, password: str, login_data: dict[str, str] | None = None
-    ) -> tuple[str, str, list | None]:
+    ) -> tuple[str, str, list[list[str] | str]]:
         """Login to the utility website.
 
         Thin wrapper kept for backward compatibility -- the actual login
@@ -133,7 +126,7 @@ class DominionSC:
         """
         return await LoginFlow(self._config).execute(session, username, password, login_data)
 
-    async def async_get_accounts(self) -> list[str]:
+    async def async_get_accounts(self) -> list[list[str] | str]:
         """Get a list of accounts for the signed in user."""
         return self.accounts
 
@@ -148,11 +141,11 @@ class DominionSC:
         :raises CannotConnect: if there is a retryable connection exception
         :raises ApiException: if API response cannot be parsed (API structure may have changed)
         """
-        accounts = await self.async_get_accounts()
+        accounts: list[list[str] | str] = await self.async_get_accounts()
         if not accounts:
             raise InvalidAuth("User not logged in to retrieve async_get_forecast.")
 
-        forecasted_data = await self._async_get_forecast_internal(self.session)
+        forecasted_data: dict[str, Any] = await self._async_get_forecast_internal(self.session)
 
         return Forecast(
             start_date=forecasted_data["start_date"],
@@ -171,24 +164,24 @@ class DominionSC:
         :raises CannotConnect: if there is a retryable connection exception
         :raises ApiException: if API response cannot be parsed (API structure may have changed)
         """
-        url_handler = DominionSCURLHandler(session=session)
-        config = self._config
+        url_handler: DominionSCURLHandler = DominionSCURLHandler(session=session)
+        config: UtilityConfig = self._config
 
-        page_headers = _headers.dominion_page_headers(config, referer="https://account.dominionenergysc.com/access/")
-        r0 = await url_handler.call_api("get", _urls.home_page_url(config), page_headers)
-        verification_token = self._find_verification_token(r0, "/", "async_get_forecast")
+        page_headers: dict[str, str] = _headers.dominion_page_headers(config, referer=config.dominion_access_referer)
+        r0: str = await url_handler.call_api("get", _urls.home_page_url(config), page_headers)
+        verification_token: str = self._find_verification_token(r0, "/", "async_get_forecast")
 
-        url1 = _urls.get_ami_usage_alerts_url(config)
-        ajax_headers = _headers.dominion_ajax_headers(
-            config, verification_token=verification_token, referer="https://account.dominionenergysc.com/"
+        url1: str = _urls.get_ami_usage_alerts_url(config)
+        ajax_headers: dict[str, str] = _headers.dominion_ajax_headers(
+            config, verification_token=verification_token, referer=config.dominion_home_referer
         )
-        r1 = await url_handler.call_api("get", url1, ajax_headers)
+        r1: str = await url_handler.call_api("get", url1, ajax_headers)
         try:
-            r1_json = json.loads(r1)
+            r1_json: dict[str, Any] = json.loads(r1)
         except Exception as err:
             raise ApiException("Failed to decode forecast data.", url=url1, response_text=r1) from err
 
-        forecast = parse_forecast(r1_json, url=url1)
+        forecast: Forecast = parse_forecast(r1_json, url=url1)
         return {
             "start_date": forecast.start_date,
             "end_date": forecast.end_date,
@@ -209,15 +202,20 @@ class DominionSC:
         :raises CannotConnect: if there is a retryable connection exception
         :raises ApiException: if API response cannot be parsed (API structure may have changed)
         """
+        if start_date is None or end_date is None:
+            raise ValueError("start_date and end_date are required.")
+        if self.user_id is None:
+            raise InvalidAuth("User not logged in to retrieve async_get_usage_reads.")
+
         # Floor the dates to midnight in the utility's local timezone (see
         # docs/REFACTOR_PLAN.md / git history: this used to be mislabeled
         # as UTC, which silently shifted the requested window).
         start_date = datetime.combine(start_date, datetime.min.time())
         end_date = datetime.combine(end_date, datetime.min.time())
-        start_time_timestamp = int(start_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
-        end_date_timestamp = int(end_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
-        url = _urls.gb_download_url(self._config, self.user_id, start_time_timestamp, end_date_timestamp, account)
-        r = await self._async_get_request(url, self._get_headers())
+        start_time_timestamp: int = int(start_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
+        end_date_timestamp: int = int(end_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
+        url: str = _urls.gb_download_url(self._config, self.user_id, start_time_timestamp, end_date_timestamp, account)
+        r: str = await self._async_get_request(url, self._get_headers())
         return parse_usage_reads(r, self.timezone, url=url)
 
     async def async_get_register_reads(
@@ -241,18 +239,23 @@ class DominionSC:
         :raises CannotConnect: if there is a retryable connection exception
         :raises ApiException: if API response cannot be parsed (API structure may have changed)
         """
+        if start_date is None or end_date is None:
+            raise ValueError("start_date and end_date are required.")
+        if self.user_id is None:
+            raise InvalidAuth("User not logged in to retrieve async_get_register_reads.")
+
         start_date = datetime.combine(start_date, datetime.min.time())
         end_date = datetime.combine(end_date, datetime.min.time())
-        start_time_timestamp = int(start_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
-        end_date_timestamp = int(end_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
-        url = _urls.gb_download_url(self._config, self.user_id, start_time_timestamp, end_date_timestamp, account)
-        r = await self._async_get_request(url, self._get_headers())
+        start_time_timestamp: int = int(start_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
+        end_date_timestamp: int = int(end_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
+        url: str = _urls.gb_download_url(self._config, self.user_id, start_time_timestamp, end_date_timestamp, account)
+        r: str = await self._async_get_request(url, self._get_headers())
         return parse_registers(r, self.timezone, url=url)
 
     def _get_headers(self) -> dict[str, str]:
         return _headers.bidgely_headers(self._config, access_token=self.access_token)
 
-    async def _async_get_request(self, url: str, headers: dict[str, str]) -> Any:
+    async def _async_get_request(self, url: str, headers: dict[str, str]) -> str:
         """Return the result of an api call.
 
         Note: this deliberately calls self.session.get directly rather
@@ -262,7 +265,7 @@ class DominionSC:
         """
         try:
             async with self.session.get(url, headers=headers) as resp:
-                result = await resp.text(encoding="utf-8")
+                result: str = await resp.text(encoding="utf-8")
         except ClientError as err:
             raise CannotConnect(
                 f"Failed to connect to API: {err}",

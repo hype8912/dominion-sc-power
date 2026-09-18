@@ -29,15 +29,17 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 
-_EFFECTIVE_FROM = date(2026, 7, 1)
-_ELECTRIC_ADJUSTMENTS = (
+_EFFECTIVE_FROM: date = date(2026, 7, 1)
+_ELECTRIC_ADJUSTMENTS: tuple[Adjustment, ...] = (
     Adjustment("fuel", "Fuel", "Included in the published energy charge; subject to adjustment.", True),
     Adjustment("dsm", "Demand Side Management", "Included in the published energy charge.", True),
     Adjustment("pension", "Pension Costs", "Included in the published energy charge.", True),
     Adjustment("storm_damage", "Storm Damage", "Included in the published energy charge.", True),
     Adjustment("der", "Distributed Energy Resource Program", "A $1.00 monthly charge is added separately.", False),
 )
-_ELECTRIC_FIXED_CHARGES = (MonthlyCharge(name="Distributed Energy Resource Program", amount=Decimal("1.00")),)
+_ELECTRIC_FIXED_CHARGES: tuple[MonthlyCharge, ...] = (
+    MonthlyCharge(name="Distributed Energy Resource Program", amount=Decimal("1.00")),
+)
 
 
 def _seasonal_tiers(summer_under: str, summer_over: str, winter_under: str, winter_over: str) -> TieredUsageCharge:
@@ -59,7 +61,33 @@ def _seasonal_tiers(summer_under: str, summer_over: str, winter_under: str, wint
     )
 
 
-RATE_2 = RatePlan(
+RATE_1: RatePlan = RatePlan(
+    code="rate_1",
+    name="Rate 1 - Residential Service: Good Cents Rate",
+    commodity=Commodity.ELECTRICITY,
+    effective_from=_EFFECTIVE_FROM,
+    effective_to=None,
+    charges=(
+        DailyCharge(name="Basic Facilities Charge", amount=Decimal("0.36164")),
+        *_ELECTRIC_FIXED_CHARGES,
+        _seasonal_tiers("0.15333", "0.16842", "0.15333", "0.14729"),
+    ),
+    eligibility_rules=(
+        EligibilityRule(
+            "closed_to_new_customers",
+            "Closed effective January 15, 1996; not available to any new structure. "
+            "Only dwellings already certified and receiving service under this schedule may remain on it.",
+        ),
+        EligibilityRule(
+            "good_cents_certification",
+            "The dwelling unit must be certified by the Company to meet or exceed the Good Cents "
+            "Program requirements in force at the time of application.",
+        ),
+    ),
+    adjustments=_ELECTRIC_ADJUSTMENTS,
+)
+
+RATE_2: RatePlan = RatePlan(
     code="rate_2",
     name="Rate 2 - Low Use Residential Service",
     commodity=Commodity.ELECTRICITY,
@@ -81,7 +109,7 @@ RATE_2 = RatePlan(
     adjustments=_ELECTRIC_ADJUSTMENTS,
 )
 
-RATE_5 = RatePlan(
+RATE_5: RatePlan = RatePlan(
     code="rate_5",
     name="Rate 5 - Residential Service: Time of Use",
     commodity=Commodity.ELECTRICITY,
@@ -115,7 +143,7 @@ RATE_5 = RatePlan(
     adjustments=_ELECTRIC_ADJUSTMENTS,
 )
 
-RATE_6 = RatePlan(
+RATE_6: RatePlan = RatePlan(
     code="rate_6",
     name="Rate 6 - Residential Service: Energy Saver/Conservation Rate",
     commodity=Commodity.ELECTRICITY,
@@ -135,7 +163,7 @@ RATE_6 = RatePlan(
     adjustments=_ELECTRIC_ADJUSTMENTS,
 )
 
-RATE_7 = RatePlan(
+RATE_7: RatePlan = RatePlan(
     code="rate_7",
     name="Rate 7 - Residential Service: Time-of-Use Demand",
     commodity=Commodity.ELECTRICITY,
@@ -176,7 +204,7 @@ RATE_7 = RatePlan(
     adjustments=_ELECTRIC_ADJUSTMENTS,
 )
 
-RATE_8 = RatePlan(
+RATE_8: RatePlan = RatePlan(
     code="rate_8",
     name="Rate 8 - Residential Service",
     commodity=Commodity.ELECTRICITY,
@@ -190,7 +218,7 @@ RATE_8 = RatePlan(
     adjustments=_ELECTRIC_ADJUSTMENTS,
 )
 
-_GAS_ADJUSTMENTS = (
+_GAS_ADJUSTMENTS: tuple[Adjustment, ...] = (
     Adjustment("gas_costs", "Gas Costs", "Included in the published energy charge; subject to adjustment.", True),
     Adjustment("dsm", "Demand Side Management", "Included in the published energy charge.", True),
     Adjustment(
@@ -198,7 +226,7 @@ _GAS_ADJUSTMENTS = (
     ),
 )
 
-RATE_32S = RatePlan(
+RATE_32S: RatePlan = RatePlan(
     code="rate_32s",
     name="Rate 32S - Gas Residential Standard Service",
     commodity=Commodity.GAS,
@@ -211,7 +239,7 @@ RATE_32S = RatePlan(
     adjustments=_GAS_ADJUSTMENTS,
 )
 
-RATE_32V = RatePlan(
+RATE_32V: RatePlan = RatePlan(
     code="rate_32v",
     name="Rate 32V - Gas Residential Value Service",
     commodity=Commodity.GAS,
@@ -235,7 +263,7 @@ RATE_32V = RatePlan(
 )
 
 RESIDENTIAL_ELECTRIC_RATE_PLANS: Mapping[str, RatePlan] = MappingProxyType(
-    {plan.code: plan for plan in (RATE_2, RATE_5, RATE_6, RATE_7, RATE_8)}
+    {plan.code: plan for plan in (RATE_1, RATE_2, RATE_5, RATE_6, RATE_7, RATE_8)}
 )
 RESIDENTIAL_GAS_RATE_PLANS: Mapping[str, RatePlan] = MappingProxyType({plan.code: plan for plan in (RATE_32S, RATE_32V)})
 RESIDENTIAL_RATE_PLANS: Mapping[str, RatePlan] = MappingProxyType(

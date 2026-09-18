@@ -32,10 +32,19 @@ class UtilityConfig:
             pilot_id="99999",
         )
 
+    ``dominion_access_referer`` and ``dominion_home_referer`` are computed
+    from ``dominion_endpoint`` plus a fixed path -- so overriding
+    ``dominion_endpoint``, as in the staging example above, automatically
+    keeps the Referer headers pointed at the same host. Nothing in this
+    codebase overrides them independently of ``dominion_endpoint``, so they
+    are read-only properties rather than separately settable fields; there
+    is no risk of them drifting out of sync with it.
+
     Attributes:
         name: Human-readable utility name, used for display purposes only.
         dominion_endpoint: Base URL for the Dominion Energy SC customer portal.
-            All ``fusionapi`` paths are appended to this.
+            All ``fusionapi`` paths are appended to this. Also sent as the
+            ``Origin`` header on authenticated requests.
         bidgely_endpoint: Base URL for the Bidgely metering analytics API.
             ``wc-session`` and ``gb-download`` paths are appended to this.
         timezone: IANA timezone name for the utility's service territory.
@@ -55,8 +64,27 @@ class UtilityConfig:
     pilot_id: str = BIDGELY_PILOT_ID
     user_agent: str = USER_AGENT
 
+    @property
+    def dominion_access_referer(self) -> str:
+        """``Referer`` header value for requests made before the authenticated home-page reload.
 
-DEFAULT_CONFIG = UtilityConfig()
+        Used for the login page fetch and the initial authenticate call.
+        Always derived from ``dominion_endpoint``, so it can never drift
+        out of sync with it.
+        """
+        return f"{self.dominion_endpoint}/access/"
+
+    @property
+    def dominion_home_referer(self) -> str:
+        """``Referer`` header value for requests made after the authenticated home-page reload.
+
+        Also used for Bidgely requests. Always derived from
+        ``dominion_endpoint``, so it can never drift out of sync with it.
+        """
+        return f"{self.dominion_endpoint}/"
+
+
+DEFAULT_CONFIG: UtilityConfig = UtilityConfig()
 """Singleton ``UtilityConfig`` with all default values for Dominion Energy SC.
 
 Import and use this when you need the config outside of a ``DominionSC``

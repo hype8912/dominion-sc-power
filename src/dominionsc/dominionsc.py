@@ -14,4 +14,4 @@ from .auth import DominionSCTFAHandler
 from .client import DominionSC
 from .transport import DominionSCURLHandler
 
-__all__ = ["DominionSC", "DominionSCTFAHandler", "DominionSCURLHandler"]
+__all__: list[str] = ["DominionSC", "DominionSCTFAHandler", "DominionSCURLHandler"]

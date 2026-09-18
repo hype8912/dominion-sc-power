@@ -1,8 +1,11 @@
-"""Tests for the cache_buster utility in transport.py."""
+"""Tests for the cache_buster utility and DominionSCURLHandler timeout handling in transport.py."""
 
 import time
+from unittest.mock import Mock
 
-from dominionsc.transport import cache_buster
+import aiohttp
+
+from dominionsc.transport import DominionSCURLHandler, cache_buster
 
 
 def test_cache_buster_returns_a_string():
@@ -34,3 +37,33 @@ def test_cache_buster_calls_return_non_decreasing_values():
     second = int(cache_buster())
 
     assert second >= first
+
+
+def test_url_handler_accepts_an_explicit_client_timeout_instance():
+    """Passing a ready-made aiohttp.ClientTimeout is stored as-is, not rewrapped."""
+    session = Mock(spec=aiohttp.ClientSession)
+    timeout = aiohttp.ClientTimeout(total=45)
+
+    handler = DominionSCURLHandler(session, timeout=timeout)
+
+    assert handler._timeout is timeout
+
+
+def test_url_handler_wraps_a_float_timeout():
+    """Passing a bare number of seconds is wrapped into a ClientTimeout(total=...)."""
+    session = Mock(spec=aiohttp.ClientSession)
+
+    handler = DominionSCURLHandler(session, timeout=10.0)
+
+    assert isinstance(handler._timeout, aiohttp.ClientTimeout)
+    assert handler._timeout.total == 10.0
+
+
+def test_url_handler_defaults_to_a_30_second_timeout():
+    """Omitting timeout entirely defaults to a 30-second ClientTimeout."""
+    session = Mock(spec=aiohttp.ClientSession)
+
+    handler = DominionSCURLHandler(session)
+
+    assert isinstance(handler._timeout, aiohttp.ClientTimeout)
+    assert handler._timeout.total == 30

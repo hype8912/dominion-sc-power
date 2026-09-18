@@ -5,6 +5,7 @@ by mocking async_login, async_get_accounts, and async_get_usage_reads.
 See docs/REFACTOR_PLAN.md Phase 5.
 """
 
+import argparse
 import csv
 import json
 from datetime import UTC, datetime
@@ -371,7 +372,7 @@ class TestRunCSV:
         assert result == 0
 
 
-def _args(*extra: str) -> object:
+def _args(*extra: str) -> argparse.Namespace:
     """Build parsed args with username/password preset plus any extras."""
     return build_parser().parse_args(["--username", "u", "--password", "p", *extra])
 

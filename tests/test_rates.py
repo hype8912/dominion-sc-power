@@ -4,6 +4,7 @@ from datetime import date, time
 from decimal import Decimal
 
 from dominionsc import (
+    RATE_1,
     RATE_2,
     RATE_5,
     RATE_6,
@@ -27,6 +28,7 @@ from dominionsc import (
 def test_catalog_contains_all_residential_plans():
     """The catalog exposes every residential plan currently defined."""
     assert [plan.code for plan in get_available_rate_plans()] == [
+        "rate_1",
         "rate_2",
         "rate_5",
         "rate_6",
@@ -59,6 +61,32 @@ def test_rate_8_uses_seasonal_tiers():
     assert winter[1].price_per_unit == Decimal("0.15253")
 
 
+def test_rate_1_uses_seasonal_tiers():
+    """Rate 1 (Good Cents) has the same July 2026 seasonal tier schedule as Rate 6."""
+    charge = next(charge for charge in RATE_1.charges if isinstance(charge, TieredUsageCharge))
+    summer = charge.tiers_by_season[Season.SUMMER]
+    winter = charge.tiers_by_season[Season.WINTER]
+
+    assert RATE_1.commodity is Commodity.ELECTRICITY
+    assert RATE_1.effective_from == date(2026, 7, 1)
+    assert summer[0].upper_bound == Decimal("800")
+    assert summer[0].price_per_unit == Decimal("0.15333")
+    assert summer[1].upper_bound is None
+    assert summer[1].price_per_unit == Decimal("0.16842")
+    assert winter[0].upper_bound == Decimal("800")
+    assert winter[0].price_per_unit == Decimal("0.15333")
+    assert winter[1].upper_bound is None
+    assert winter[1].price_per_unit == Decimal("0.14729")
+
+
+def test_rate_1_is_closed_to_new_customers():
+    """Rate 1 is closed to new structures but remains available to grandfathered dwellings."""
+    closed_rule = next(rule for rule in RATE_1.eligibility_rules if rule.code == "closed_to_new_customers")
+
+    assert len(RATE_1.eligibility_rules) == 2
+    assert "1996" in closed_rule.description
+
+
 def test_rate_6_uses_seasonal_tiers():
     """Rate 6 has the July 2026 seasonal 800 kWh tier schedules — both tiers, both seasons."""
     charge = next(charge for charge in RATE_6.charges if isinstance(charge, TieredUsageCharge))
@@ -84,12 +112,12 @@ def test_rate_5_uses_time_of_use_pricing_with_fallback():
     winter = charge.periods_by_season[Season.WINTER]
 
     # --- prices ---
-    assert summer[0].price_per_unit == Decimal("0.29907")   # on_peak
-    assert summer[1].price_per_unit == Decimal("0.09623")   # super_off_peak
-    assert summer[2].price_per_unit == Decimal("0.15074")   # off_peak (fallback)
-    assert winter[0].price_per_unit == Decimal("0.29907")   # on_peak
-    assert winter[1].price_per_unit == Decimal("0.09623")   # super_off_peak
-    assert winter[2].price_per_unit == Decimal("0.15074")   # off_peak (fallback)
+    assert summer[0].price_per_unit == Decimal("0.29907")  # on_peak
+    assert summer[1].price_per_unit == Decimal("0.09623")  # super_off_peak
+    assert summer[2].price_per_unit == Decimal("0.15074")  # off_peak (fallback)
+    assert winter[0].price_per_unit == Decimal("0.29907")  # on_peak
+    assert winter[1].price_per_unit == Decimal("0.09623")  # super_off_peak
+    assert winter[2].price_per_unit == Decimal("0.15074")  # off_peak (fallback)
 
     # --- fallback flags ---
     assert summer[0].fallback is False
@@ -98,17 +126,17 @@ def test_rate_5_uses_time_of_use_pricing_with_fallback():
     assert winter[2].fallback is True
 
     # --- summer windows ---
-    assert summer[0].windows[0].start == time(16)           # on_peak 16:00–20:00
+    assert summer[0].windows[0].start == time(16)  # on_peak 16:00-20:00
     assert summer[0].windows[0].end == time(20)
-    assert summer[1].windows[0].start == time(1)            # super_off_peak 1:00–5:00
+    assert summer[1].windows[0].start == time(1)  # super_off_peak 1:00-5:00
     assert summer[1].windows[0].end == time(5)
 
     # --- winter windows ---
-    assert winter[0].windows[0].start == time(6)            # on_peak 6:00–9:00
+    assert winter[0].windows[0].start == time(6)  # on_peak 6:00-9:00
     assert winter[0].windows[0].end == time(9)
-    assert winter[1].windows[0].start == time(1)            # super_off_peak 1:00–5:00
+    assert winter[1].windows[0].start == time(1)  # super_off_peak 1:00-5:00
     assert winter[1].windows[0].end == time(5)
-    assert winter[1].windows[1].start == time(12)           # super_off_peak 12:00–15:00
+    assert winter[1].windows[1].start == time(12)  # super_off_peak 12:00-15:00
     assert winter[1].windows[1].end == time(15)
 
 
@@ -120,9 +148,9 @@ def test_rate_7_combines_time_of_use_and_demand_charges():
     winter = tou.periods_by_season[Season.WINTER]
 
     # --- energy prices ---
-    assert summer[0].price_per_unit == Decimal("0.17441")   # on_peak
-    assert summer[1].price_per_unit == Decimal("0.08841")   # super_off_peak
-    assert summer[2].price_per_unit == Decimal("0.10124")   # off_peak (fallback)
+    assert summer[0].price_per_unit == Decimal("0.17441")  # on_peak
+    assert summer[1].price_per_unit == Decimal("0.08841")  # super_off_peak
+    assert summer[2].price_per_unit == Decimal("0.10124")  # off_peak (fallback)
     assert winter[0].price_per_unit == Decimal("0.17441")
     assert winter[1].price_per_unit == Decimal("0.08841")
     assert winter[2].price_per_unit == Decimal("0.10124")
@@ -132,13 +160,13 @@ def test_rate_7_combines_time_of_use_and_demand_charges():
     assert winter[2].fallback is True
 
     # --- summer windows ---
-    assert summer[0].windows[0].start == time(16)           # on_peak 16:00–20:00
+    assert summer[0].windows[0].start == time(16)  # on_peak 16:00-20:00
     assert summer[0].windows[0].end == time(20)
-    assert summer[1].windows[0].start == time(1)            # super_off_peak 1:00–5:00
+    assert summer[1].windows[0].start == time(1)  # super_off_peak 1:00-5:00
     assert summer[1].windows[0].end == time(5)
 
     # --- winter windows ---
-    assert winter[0].windows[0].start == time(6)            # on_peak 6:00–9:00
+    assert winter[0].windows[0].start == time(6)  # on_peak 6:00-9:00
     assert winter[0].windows[0].end == time(9)
     assert winter[1].windows[0].start == time(1)
     assert winter[1].windows[0].end == time(5)

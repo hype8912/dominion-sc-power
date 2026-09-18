@@ -28,10 +28,19 @@ import logging
 import sys
 from datetime import datetime, timedelta
 from getpass import getpass
+from typing import Any
 
 import aiohttp
 
-from dominionsc import DominionSC, InvalidAuth, MfaChallenge, create_cookie_jar
+from dominionsc import (
+    DominionSC,
+    DominionSCTFAHandler,
+    Forecast,
+    InvalidAuth,
+    MfaChallenge,
+    RegisterReads,
+    create_cookie_jar,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     Separated from run() so it can be imported and tested independently.
     """
-    parser = argparse.ArgumentParser(
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Fetch usage data from Dominion Energy SC.",
     )
     parser.add_argument(
@@ -89,26 +98,26 @@ async def _handle_mfa(
 
     Returns True if MFA succeeded and login was retried, False on failure.
     """
-    handler = challenge.handler
+    handler: DominionSCTFAHandler = challenge.handler
     print(f"TFA Challenge: {challenge}")
 
-    options = await handler.async_get_tfa_options()
+    options: dict[str, str] = await handler.async_get_tfa_options()
     if options:
         print("Please select an TFA option:")
         for i, (_, value) in enumerate(options.items()):
             print(f"  [{i + 1}] {value}")
         try:
-            choice_index = int(input("Enter the number for your choice: ")) - 1
-            choice_key = list(options.keys())[choice_index]
+            choice_index: int = int(input("Enter the number for your choice: ")) - 1
+            choice_key: str = list(options.keys())[choice_index]
         except (ValueError, IndexError):
             print("Invalid selection.")
             return False
         await handler.async_select_tfa_option(choice_key)
         print(f"A security code has been sent via {options[choice_key]}.")
 
-    code = input("Enter the security code: ")
+    code: str = input("Enter the security code: ")
     try:
-        login_data = await handler.async_submit_tfa_code(code)
+        login_data: dict[str, str] = await handler.async_submit_tfa_code(code)
     except InvalidAuth:
         logging.exception("TFA failed")
         return False
@@ -135,10 +144,10 @@ async def run(args: argparse.Namespace) -> int:
     if args.end_date is None:
         args.end_date = datetime.now()
 
-    username = args.username or input("Username: ")
-    password = args.password or getpass("Password: ")
+    username: str = args.username or input("Username: ")
+    password: str = args.password or getpass("Password: ")
 
-    login_data = None
+    login_data: dict[str, str] | None = None
     if args.login_data_file:
         try:
             with open(args.login_data_file) as file:
@@ -147,7 +156,7 @@ async def run(args: argparse.Namespace) -> int:
             pass
 
     async with aiohttp.ClientSession(cookie_jar=create_cookie_jar()) as session:
-        dominionsc = DominionSC(session, username, password, login_data)
+        dominionsc: DominionSC = DominionSC(session, username, password, login_data)
 
         try:
             await dominionsc.async_login()
@@ -159,11 +168,13 @@ async def run(args: argparse.Namespace) -> int:
             return 1
 
         if not args.csv:
-            forecast = await dominionsc.async_get_forecast()
+            forecast: Forecast = await dominionsc.async_get_forecast()
             print("\nCurrent bill forecast:", forecast)
 
         # async_get_accounts() returns the legacy [[types], addr] list;
         # destructure explicitly so the intent is clear.
+        measurement_types: list[str] | str
+        _service_addr: list[str] | str
         measurement_types, _service_addr = await dominionsc.async_get_accounts()
 
         if args.csv:
@@ -171,10 +182,10 @@ async def run(args: argparse.Namespace) -> int:
             # The original __main__.py opened with mode "w" inside the loop,
             # silently overwriting each prior account's output (finding F9).
             with open(args.csv, "w", newline="") as csv_file:
-                writer = csv.writer(csv_file)
+                writer: Any = csv.writer(csv_file)
                 writer.writerow(["service", "register", "start_time", "end_time", "consumption"])
                 for account in measurement_types:
-                    registers = await dominionsc.async_get_register_reads(
+                    registers: list[RegisterReads] = await dominionsc.async_get_register_reads(
                         account,
                         args.start_date,
                         args.end_date,
@@ -207,6 +218,6 @@ async def run(args: argparse.Namespace) -> int:
 
 def main() -> None:
     """Entry point: parse args and run the async CLI."""
-    parser = build_parser()
-    args = parser.parse_args()
+    parser: argparse.ArgumentParser = build_parser()
+    args: argparse.Namespace = parser.parse_args()
     sys.exit(asyncio.run(run(args)))

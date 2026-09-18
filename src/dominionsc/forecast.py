@@ -9,4 +9,4 @@ See docs/REFACTOR_PLAN.md Phase 4.
 
 from .models.forecast import Forecast
 
-__all__ = ["Forecast"]
+__all__: list[str] = ["Forecast"]

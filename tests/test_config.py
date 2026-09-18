@@ -43,7 +43,7 @@ def test_utility_config_is_frozen():
     config = UtilityConfig()
 
     with pytest.raises(dataclasses.FrozenInstanceError):
-        config.timezone = "UTC"  # type: ignore[misc]
+        config.timezone = "UTC"  # ty: ignore[invalid-assignment]
 
 
 def test_utility_config_supports_field_overrides():
@@ -54,3 +54,35 @@ def test_utility_config_supports_field_overrides():
     assert custom.pilot_id == "00001"
     assert custom.timezone == DEFAULT_CONFIG.timezone
     assert custom.user_agent == DEFAULT_CONFIG.user_agent
+
+
+def test_default_config_referers_derive_from_dominion_endpoint():
+    """DEFAULT_CONFIG's Referer defaults are built from its own dominion_endpoint."""
+    assert DEFAULT_CONFIG.dominion_access_referer == "https://account.dominionenergysc.com/access/"
+    assert DEFAULT_CONFIG.dominion_home_referer == "https://account.dominionenergysc.com/"
+
+
+def test_referer_properties_follow_an_overridden_dominion_endpoint():
+    """Overriding dominion_endpoint alone still produces consistent Referer values.
+
+    This is the whole point of deriving them as properties rather than
+    hardcoding a second copy of the hostname: a staging config can't end up
+    sending Referer headers that point at the production host.
+    """
+    custom = UtilityConfig(dominion_endpoint="https://staging.example.com")
+
+    assert custom.dominion_access_referer == "https://staging.example.com/access/"
+    assert custom.dominion_home_referer == "https://staging.example.com/"
+
+
+def test_referer_properties_cannot_be_set_directly():
+    """dominion_access_referer/dominion_home_referer are read-only properties, not fields.
+
+    Nothing in this codebase overrides them independently of
+    dominion_endpoint, so they can't drift out of sync with it -- there is
+    no separate value to override.
+    """
+    config = UtilityConfig()
+
+    with pytest.raises(AttributeError):
+        config.dominion_access_referer = "https://custom.example.com/login"  # ty: ignore[invalid-assignment]

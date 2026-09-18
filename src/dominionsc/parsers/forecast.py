@@ -6,13 +6,14 @@ Takes the already-decoded JSON payload dict, returns a Forecast object.
 See docs/REFACTOR_PLAN.md Phase 3.
 """
 
-from datetime import datetime
+from datetime import date, datetime
+from typing import Any
 
 from ..exceptions import ApiException
 from ..models.forecast import Forecast
 
 
-def parse_forecast(payload: dict, url: str | None = None) -> Forecast:
+def parse_forecast(payload: dict[str, Any], url: str | None = None) -> Forecast:
     """Parse a decoded GetAccountAMIUsageAlerts JSON payload into a Forecast.
 
     Args:
@@ -28,16 +29,16 @@ def parse_forecast(payload: dict, url: str | None = None) -> Forecast:
 
     """
     try:
-        alert = payload["data"]["amiUsageAlert"]
-        start_date = datetime.fromisoformat(alert["currentBillUsageStartDate"]).date()
-        end_date = datetime.fromisoformat(alert["currentBillUsageEndDate"]).date()
-        current_date = datetime.fromisoformat(alert["currentBillThroughDate"]).date()
-        cost_to_date = alert["totalCostUnbilledConsumption"]
-        forecasted_cost = round(
+        alert: Any = payload["data"]["amiUsageAlert"]
+        start_date: date = datetime.fromisoformat(alert["currentBillUsageStartDate"]).date()
+        end_date: date = datetime.fromisoformat(alert["currentBillUsageEndDate"]).date()
+        current_date: date = datetime.fromisoformat(alert["currentBillThroughDate"]).date()
+        cost_to_date: float = alert["totalCostUnbilledConsumption"]
+        forecasted_cost: float = round(
             alert["currentCostPerDay"] * alert["numberOfDaysInCurrentBill"],
             2,
         )
-        typical_cost = alert["lastYearTotalAmount"] if alert["lastYearAmountExists"] else None
+        typical_cost: float | None = alert["lastYearTotalAmount"] if alert["lastYearAmountExists"] else None
     except Exception as err:
         raise ApiException("Failed to decode forecast data.", url=url) from err
 

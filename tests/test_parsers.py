@@ -14,7 +14,9 @@ from dominionsc.exceptions import ApiException
 from dominionsc.models.register_reads import RegisterReads
 from dominionsc.parsers.forecast import parse_forecast
 from dominionsc.parsers.greenbutton import (
+    _extract_power_of_ten_multiplier,
     _extract_usage_point_id,
+    _resolve_scale_factor,
     parse_registers,
     parse_usage_reads,
 )
@@ -192,6 +194,93 @@ class TestParseRegisters:
         assert len(registers) == 1
         assert registers[0].usage_point_id == ""
         assert registers[0].reads[0].consumption == 9
+
+
+# ---------------------------------------------------------------------------
+# Green Button XML parser -- ReadingType powerOfTenMultiplier scaling
+# ---------------------------------------------------------------------------
+#
+# Regression coverage for the gas consumption 1000x inflation bug: Dominion's
+# gas feed declares ReadingType uom=119 (cubic feet) with
+# powerOfTenMultiplier=-3 (raw values are milli-ft³), which the parser used
+# to ignore entirely, storing raw thousandths-of-a-cubic-foot as if they
+# were whole cubic feet. Real bill: 5 CCF (500 ft³) over 33 days; unscaled
+# parsing produced ~500,000 ft³ for the same window -- exactly the 1000x
+# ratio predicted by an ignored multiplier of -3.
+
+
+class TestPowerOfTenMultiplierScaling:
+    """Tests for _extract_power_of_ten_multiplier, _resolve_scale_factor.
+
+    Also covers their integration into parse_registers().
+    """
+
+    def _load_fixture(self, name: str) -> str:
+        return (FIXTURE_DIR / name).read_text(encoding="utf-8")
+
+    def test_gas_fixture_applies_milli_scale(self):
+        """Real-world gas fixture (powerOfTenMultiplier=-3).
+
+        Raw milli-ft³ values are correctly scaled down to whole cubic feet.
+        """
+        xml = self._load_fixture("greenbutton_gas_scaled.xml")
+        registers = parse_registers(xml, "America/New_York")
+        assert len(registers) == 1
+        consumptions = [r.consumption for r in registers[0].reads]
+        assert consumptions == [2.0, 0.0, 4.0]
+
+    def test_electric_fixture_unaffected_no_multiplier_element(self):
+        """Electric's ReadingType has no powerOfTenMultiplier at all.
+
+        Scale stays 1.0 and raw values pass through unchanged (no regression).
+        """
+        xml = self._load_fixture("greenbutton_multi_register.xml")
+        registers = {r.usage_point_id: r for r in parse_registers(xml, "America/New_York")}
+        consumptions = [r.consumption for r in registers[GRID_UP].reads]
+        assert consumptions == [209, 328, 412]
+
+    def test_extract_multiplier_missing_content_returns_none(self):
+        """An entry with no 'content' key at all yields None (not a crash)."""
+        assert _extract_power_of_ten_multiplier({"title": "x"}) is None
+
+    def test_extract_multiplier_non_dict_reading_type_returns_none(self):
+        """A self-closing <espi:ReadingType/> parses as None via xmltodict.
+
+        Not a dict -- must be tolerated, not crash.
+        """
+        assert _extract_power_of_ten_multiplier({"content": {"espi:ReadingType": None}}) is None
+
+    def test_extract_multiplier_non_numeric_value_returns_none(self):
+        """A malformed (non-numeric) multiplier value is tolerated, not raised."""
+        entry = {"content": {"espi:ReadingType": {"espi:powerOfTenMultiplier": "not-a-number"}}}
+        assert _extract_power_of_ten_multiplier(entry) is None
+
+    def test_resolve_scale_factor_no_reading_type_defaults_to_one(self):
+        """No ReadingType entries anywhere in the feed -> scale factor 1.0.
+
+        Equivalent to the pre-fix, unscaled behaviour.
+        """
+        assert _resolve_scale_factor([{"title": "Interval Consumption"}]) == 1.0
+
+    def test_resolve_scale_factor_negative_multiplier(self):
+        """A single multiplier of -3 across the feed resolves to 0.001."""
+        entries = [{"content": {"espi:ReadingType": {"espi:powerOfTenMultiplier": "-3"}}}]
+        assert _resolve_scale_factor(entries) == pytest.approx(0.001)
+
+    def test_resolve_scale_factor_multiple_distinct_values_falls_back_to_one(self, caplog: pytest.LogCaptureFixture):
+        """Multiple different multipliers in one feed (unobserved in practice).
+
+        Falls back to 1.0 and logs a warning rather than guessing which
+        value applies to which register.
+        """
+        entries = [
+            {"content": {"espi:ReadingType": {"espi:powerOfTenMultiplier": "-3"}}},
+            {"content": {"espi:ReadingType": {"espi:powerOfTenMultiplier": "0"}}},
+        ]
+        with caplog.at_level("WARNING"):
+            scale = _resolve_scale_factor(entries)
+        assert scale == 1.0
+        assert "Multiple distinct ReadingType powerOfTenMultiplier" in caplog.text
 
 
 # ---------------------------------------------------------------------------

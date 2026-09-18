@@ -9,4 +9,4 @@ See docs/REFACTOR_PLAN.md Phase 4.
 
 from .models.usage_read import UsageRead
 
-__all__ = ["UsageRead"]
+__all__: list[str] = ["UsageRead"]
