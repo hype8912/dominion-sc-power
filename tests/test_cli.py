@@ -116,7 +116,7 @@ def _mock_dominionsc(usage_reads: list[UsageRead] | None = None):
 
 
 class TestRunCSV:
-    """Tests for run() CSV writing behaviour."""
+    """Tests for run() CSV writing behavior."""
 
     @pytest.mark.asyncio
     async def test_csv_has_header_row(self, tmp_path):

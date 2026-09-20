@@ -2,56 +2,61 @@
 
 ## Authentication State Machine
 
+The library models login only. It has no token refresh: when a session is no longer valid, the caller calls `async_login()` again.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Unauthenticated
-    Unauthenticated --> LoggingIn: LoginFlow.execute()
-    LoggingIn --> TFA_Required: MfaChallenge
-    LoggingIn --> Authenticated: direct OK
-    TFA_Required --> LoggingIn: submit TFA
-    TFA_Required --> Authenticated: TFA OK
-    Authenticated --> Unauthenticated: session expiry / error
-    Authenticated --> Authenticated: refresh / continue
+    Unauthenticated --> LoggingIn: async_login()
+    LoggingIn --> TFA_Required: MfaChallenge raised
+    LoggingIn --> Authenticated: saved tfa_token accepted
+    LoggingIn --> Unauthenticated: InvalidAuth, CannotConnect or ApiException
+    TFA_Required --> LoggingIn: code accepted, async_login() retried
+    TFA_Required --> Unauthenticated: code rejected (InvalidAuth)
 ```
 
 ## Auth Flow Sequence (Security-Focused)
 
 ```mermaid
 sequenceDiagram
+    participant Caller as Caller (CLI or Home Assistant)
     participant Client as client.DominionSC
-    participant Auth as auth.py
+    participant Auth as auth.LoginFlow
     participant Transport as transport.py
-    participant Cookies as cookie jar (aiohttp)
-    participant API as Dominion API
+    participant Portal as Dominion portal
+    participant Bidgely as Bidgely API
 
-    Client->>Auth: LoginFlow.execute(username, password)
-    Auth->>Transport: POST /login
-    Transport->>API: credentials
-    API-->>Transport: session + MfaChallenge (if TFA enabled)
-    alt Direct Auth
-        Transport-->>Auth: session cookie
-        Auth->>Cookies: store cookies
-        Auth-->>Client: ready
-    else TFA Required
-        Transport-->>Auth: MfaChallenge exception
-        Auth->>Client: raise MfaChallenge
-        Client->>Auth: submit code
-        Auth->>Transport: POST /tfa
-        Transport->>API: TFA code
-        API-->>Transport: validated session
-        Auth->>Cookies: persist session
-        Auth-->>Client: ready
+    Caller->>Client: async_login()
+    Client->>Auth: LoginFlow.execute(session, username, password, login_data)
+    Auth->>Transport: GET login page, POST Authenticate
+    Transport->>Portal: username and password over HTTPS
+    Portal-->>Auth: status twoFA
+    alt saved tfa_token is accepted
+        Auth->>Transport: GET Verify2FAToken
+        Transport->>Portal: saved tfa_token
+    else token missing or rejected
+        Auth-->>Caller: raise MfaChallenge (carries TFA handler)
+        Caller->>Portal: handler: SendPINCode, then VerifyPIN with the code
+        Portal-->>Caller: new tfa_token (caller must store it securely)
+        Caller->>Client: async_login() again with login_data
     end
-    Note over Client,Cookies: Cookie jar reused for all subsequent requests via transport session
+    Auth->>Transport: home page, account listing, InitAccount, GetBidgelySDKInit
+    Auth->>Transport: POST wc-session (encrypted token)
+    Transport->>Bidgely: encrypted token
+    Bidgely-->>Auth: bearer access token
+    Note over Client,Bidgely: Session cookies live in the caller's aiohttp cookie jar. The bearer token and user id stay in memory on DominionSC.
 ```
 
 ## Security Boundaries & Sensitive Assets
 
-- **Secrets:** Password / TFA code passed through `auth.py`; never stored in source or config files (only env/args at runtime).
-- **Session:** `create_cookie_jar()` in `__init__.py`; session cookies handled by `aiohttp.ClientSession` via `transport.py`.
-- **Transport:** HTTPS only to Dominion endpoints; `urls.py` defines secure endpoints.
-- **Data at rest:** CSV output may contain usage data; no encryption enforced by library (consumer responsibility).
-- **Exceptions:** `exceptions.py` defines `InvalidAuth`, `MfaChallenge` to prevent credential leakage in error messages.
+- **Credentials:** the username and password are supplied by the caller (constructor arguments; for the CLI, `--username`/`--password` or interactive prompts, with the password read through `getpass`). `DominionSC` keeps them on the instance for its lifetime and sends them only to the portal's `Authenticate` endpoint. The library does not read credentials from the environment or from files. A `--password` given on the command line is visible in shell history and process listings; omit it to be prompted instead.
+- **TFA code:** entered by the user and sent once to `VerifyPIN`; not stored.
+- **TFA token (`tfa_token`):** a long-lived value that lets later logins skip interactive TFA. The library returns it to the caller and never persists it. The CLI writes it as plain JSON to `--login_data_file` without changing file permissions; Home Assistant stores it in the config entry. Treat it like a password.
+- **Bidgely bearer token and user id:** held in memory on the `DominionSC` instance (`access_token`, `user_id`); never persisted by the library.
+- **Session cookies:** managed by the caller's `aiohttp.ClientSession`, which must be created with `create_cookie_jar()` (`helpers.py`, re-exported from the package root) so cookie values are not percent-encoded.
+- **Transport:** the default Dominion and Bidgely endpoints in `config.py` are HTTPS.
+- **Data at rest:** CSV output contains usage data and the service type; the library does no encryption (consumer responsibility).
+- **Exceptions:** the library does not put the password in exception messages, but `InvalidAuth`, `ApiException`, and `CannotConnect` can embed raw API response bodies (`response_text`), which may include a service address or account number. Redact them before logging or sharing.
 
 ## Component Security Map
 
@@ -63,21 +68,29 @@ flowchart LR
         TransportMod["transport.py"]
     end
     subgraph SensitiveAssets["Sensitive Assets"]
-        Creds["User credentials (runtime only)"]
-        TFA_Code["2FA code (runtime only)"]
-        Session["Cookie jar / session tokens"]
+        Creds["Username and password (in memory)"]
+        TFA_Code["TFA code (used once)"]
+        TFA_Token["tfa_token (persisted by the caller)"]
+        Bearer["Bidgely bearer token (in memory)"]
+        Session["Cookie jar / session cookies (caller's session)"]
     end
     subgraph External["External / Untrusted"]
-        UserInput["CLI args / env vars"]
-        DominionAPI["Dominion ESPI API"]
+        UserInput["Caller input: constructor args, CLI args or prompts"]
+        DominionAPI["Dominion portal API"]
+        BidgelyAPI["Bidgely API"]
     end
 
     UserInput --> AuthMod
     AuthMod --> Creds
     AuthMod --> TFA_Code
-    AuthMod --> Session
+    AuthMod --> TFA_Token
+    AuthMod --> Bearer
     AuthMod --> TransportMod
+    TransportMod --> Session
     TransportMod --> DominionAPI
+    TransportMod --> BidgelyAPI
+    ClientMod --> Bearer
     ClientMod --> Session
     ClientMod --> TransportMod
+    ClientMod --> BidgelyAPI
 ```

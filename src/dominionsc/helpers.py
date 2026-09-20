@@ -13,7 +13,7 @@ def create_cookie_jar() -> aiohttp.CookieJar:
 
     Passing ``quote_cookie=False`` instructs aiohttp to store and resend
     cookie values exactly as the server sent them, which matches the
-    browser behaviour the site expects.
+    browser behavior the site expects.
 
     Always pass the returned jar to ``aiohttp.ClientSession``::
 

@@ -258,7 +258,7 @@ class TestPowerOfTenMultiplierScaling:
     def test_resolve_scale_factor_no_reading_type_defaults_to_one(self):
         """No ReadingType entries anywhere in the feed -> scale factor 1.0.
 
-        Equivalent to the pre-fix, unscaled behaviour.
+        Equivalent to the pre-fix, unscaled behavior.
         """
         assert _resolve_scale_factor([{"title": "Interval Consumption"}]) == 1.0
 

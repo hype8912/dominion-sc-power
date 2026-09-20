@@ -218,6 +218,37 @@ RATE_8: RatePlan = RatePlan(
     adjustments=_ELECTRIC_ADJUSTMENTS,
 )
 
+# ---------------------------------------------------------------------------
+# Superseded tariff periods
+# ---------------------------------------------------------------------------
+# Rate values that were in effect before ``_EFFECTIVE_FROM`` are kept as
+# ``RatePlan`` objects with ``effective_to`` set, so callers can price usage
+# recorded under an earlier tariff (see ``get_rate_plan_for_date``). They
+# carry only the usage charge: the fixed daily/monthly charges in force at the
+# time were not recorded, so no fixed charges are defined for these periods.
+_PRIOR_EFFECTIVE_FROM: date = date(2025, 7, 23)
+_PRIOR_EFFECTIVE_TO: date = date(2026, 6, 30)
+
+RATE_6_2025: RatePlan = RatePlan(
+    code="rate_6",
+    name="Rate 6 - Residential Service: Energy Saver/Conservation Rate",
+    commodity=Commodity.ELECTRICITY,
+    effective_from=_PRIOR_EFFECTIVE_FROM,
+    effective_to=_PRIOR_EFFECTIVE_TO,
+    charges=(_seasonal_tiers("0.14164", "0.15505", "0.14164", "0.13628"),),
+    adjustments=_ELECTRIC_ADJUSTMENTS,
+)
+
+RATE_8_2025: RatePlan = RatePlan(
+    code="rate_8",
+    name="Rate 8 - Residential Service",
+    commodity=Commodity.ELECTRICITY,
+    effective_from=_PRIOR_EFFECTIVE_FROM,
+    effective_to=_PRIOR_EFFECTIVE_TO,
+    charges=(_seasonal_tiers("0.14599", "0.15983", "0.14599", "0.14045"),),
+    adjustments=_ELECTRIC_ADJUSTMENTS,
+)
+
 _GAS_ADJUSTMENTS: tuple[Adjustment, ...] = (
     Adjustment("gas_costs", "Gas Costs", "Included in the published energy charge; subject to adjustment.", True),
     Adjustment("dsm", "Demand Side Management", "Included in the published energy charge.", True),
@@ -270,6 +301,15 @@ RESIDENTIAL_RATE_PLANS: Mapping[str, RatePlan] = MappingProxyType(
     {**RESIDENTIAL_ELECTRIC_RATE_PLANS, **RESIDENTIAL_GAS_RATE_PLANS}
 )
 
+# Every known tariff period per plan code, ascending by ``effective_from``.
+# Plans with no superseded periods map to a single-entry tuple (the current plan).
+RATE_PLAN_HISTORY: Mapping[str, tuple[RatePlan, ...]] = MappingProxyType(
+    {
+        code: (*(old for old in (RATE_6_2025, RATE_8_2025) if old.code == code), plan)
+        for code, plan in RESIDENTIAL_RATE_PLANS.items()
+    }
+)
+
 
 def get_rate_plan(code: str) -> RatePlan | None:
     """Return a residential rate plan by code, or ``None`` when unknown."""
@@ -277,5 +317,26 @@ def get_rate_plan(code: str) -> RatePlan | None:
 
 
 def get_available_rate_plans() -> tuple[RatePlan, ...]:
-    """Return all currently catalogued residential rate plans."""
+    """Return all currently cataloged residential rate plans."""
     return tuple(RESIDENTIAL_RATE_PLANS.values())
+
+
+def get_rate_plan_history(code: str) -> tuple[RatePlan, ...]:
+    """Return every known tariff period for a rate code, oldest first.
+
+    The last entry is the current plan (the one ``get_rate_plan`` returns).
+    Returns an empty tuple when the code is unknown.
+    """
+    return RATE_PLAN_HISTORY.get(code, ())
+
+
+def get_rate_plan_for_date(code: str, on: date) -> RatePlan | None:
+    """Return the plan for *code* that was in effect on *on*.
+
+    Returns ``None`` when the code is unknown or *on* falls before the earliest
+    recorded tariff period (or in a gap between periods).
+    """
+    for plan in get_rate_plan_history(code):
+        if plan.effective_from <= on and (plan.effective_to is None or on <= plan.effective_to):
+            return plan
+    return None

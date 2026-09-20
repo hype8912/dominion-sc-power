@@ -11,6 +11,15 @@ bumped for a release.
 
 ### Added
 
+- Superseded tariff periods: `RATE_6_2025` and `RATE_8_2025` (in effect
+  2025-07-23 to 2026-06-30) archive the prior Rate 6 / Rate 8 usage charges as
+  `RatePlan` objects with `effective_to` set. They carry only the usage charge
+  (the fixed charges then in force were not recorded).
+- `get_rate_plan_history(code)` returns every known period for a rate code,
+  oldest first (the last entry is the current plan), and
+  `get_rate_plan_for_date(code, on)` returns the plan in effect on a date, so
+  callers can price historical usage. `RATE_PLAN_HISTORY` exposes the mapping.
+  `get_rate_plan` and `get_available_rate_plans` still return current plans only.
 - `py.typed` marker (PEP 561): the package now ships inline type information,
   so consumers get proper static type checking against `dominionsc` instead
   of falling back to `Any` everywhere. `RegisterReads` is now also
@@ -24,6 +33,15 @@ bumped for a release.
   Home Assistant integration) to override the Bidgely multi-tenant pilot ID
   per-instance instead of relying solely on the hardcoded
   `const.BIDGELY_PILOT_ID`. Falls back to the library default when not given.
+
+### Fixed
+
+- **Gas consumption was inflated 1000x.** The Green Button parser ignored the
+  `powerOfTenMultiplier` declared on each feed's `ReadingType`. Dominion's gas
+  feed reports cubic feet (`uom=119`) with a multiplier of `-3`, so raw values
+  (thousandths of a cubic foot) were returned as cubic feet (a 5 CCF bill showed
+  as roughly 500,000 ft³). The multiplier is now applied to every reading in the
+  feed. Electric feeds declare no multiplier and are unaffected.
 
 ## [0.1.0] - 2026-09-14
 
@@ -60,7 +78,7 @@ bumped for a release.
 
 ### Fixed
 
-- **Bidgely pilot id** was hardcoded to the wrong value in two places, causing
+- **Bidgely pilot ID** was hardcoded to the wrong value in two places, causing
   requests to be routed to the wrong pilot and return incorrect (estimated,
   hourly-quantized) data. The correct value is now centralized in
   `const.BIDGELY_PILOT_ID`.

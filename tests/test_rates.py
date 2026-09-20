@@ -8,8 +8,10 @@ from dominionsc import (
     RATE_2,
     RATE_5,
     RATE_6,
+    RATE_6_2025,
     RATE_7,
     RATE_8,
+    RATE_8_2025,
     RATE_32V,
     Commodity,
     DailyCharge,
@@ -22,6 +24,8 @@ from dominionsc import (
     UsageUnit,
     get_available_rate_plans,
     get_rate_plan,
+    get_rate_plan_for_date,
+    get_rate_plan_history,
 )
 
 
@@ -261,3 +265,65 @@ def test_rate_2_der_adjustment_is_not_included_in_published_charge():
     der_adj = next(adj for adj in RATE_2.adjustments if adj.code == "der")
 
     assert der_adj.included_in_published_charge is False
+
+
+def _tier_prices(plan, season):
+    charge = next(c for c in plan.charges if isinstance(c, TieredUsageCharge))
+    return [(tier.upper_bound, tier.price_per_unit) for tier in charge.tiers_by_season[season]]
+
+
+def test_rate_8_2025_values_and_dates():
+    """Rate 8's July 2025 tariff is archived with its own dates and prices."""
+    assert RATE_8_2025.code == "rate_8"
+    assert RATE_8_2025.effective_from == date(2025, 7, 23)
+    assert RATE_8_2025.effective_to == date(2026, 6, 30)
+    assert _tier_prices(RATE_8_2025, Season.SUMMER) == [
+        (Decimal("800"), Decimal("0.14599")),
+        (None, Decimal("0.15983")),
+    ]
+    assert _tier_prices(RATE_8_2025, Season.WINTER) == [
+        (Decimal("800"), Decimal("0.14599")),
+        (None, Decimal("0.14045")),
+    ]
+
+
+def test_rate_6_2025_values_and_dates():
+    """Rate 6's July 2025 tariff is archived with its own dates and prices."""
+    assert RATE_6_2025.code == "rate_6"
+    assert RATE_6_2025.effective_from == date(2025, 7, 23)
+    assert RATE_6_2025.effective_to == date(2026, 6, 30)
+    assert _tier_prices(RATE_6_2025, Season.SUMMER) == [
+        (Decimal("800"), Decimal("0.14164")),
+        (None, Decimal("0.15505")),
+    ]
+    assert _tier_prices(RATE_6_2025, Season.WINTER) == [
+        (Decimal("800"), Decimal("0.14164")),
+        (None, Decimal("0.13628")),
+    ]
+
+
+def test_archived_plans_are_not_in_the_current_catalog():
+    """get_rate_plan / get_available_rate_plans only ever return current plans."""
+    assert get_rate_plan("rate_6") is RATE_6
+    assert RATE_6_2025 not in get_available_rate_plans()
+    assert RATE_8_2025 not in get_available_rate_plans()
+
+
+def test_rate_plan_history_is_ascending_and_ends_with_current_plan():
+    """History runs oldest to newest, ends at the current plan, and is empty for unknown codes."""
+    assert get_rate_plan_history("rate_8") == (RATE_8_2025, RATE_8)
+    assert get_rate_plan_history("rate_6") == (RATE_6_2025, RATE_6)
+    for code in ("rate_1", "rate_2", "rate_5", "rate_7", "rate_32s", "rate_32v"):
+        assert get_rate_plan_history(code) == (get_rate_plan(code),)
+    assert get_rate_plan_history("not_a_rate") == ()
+
+
+def test_rate_plan_for_date_selects_period():
+    """The plan is chosen by date; boundaries are inclusive and gaps or unknown codes give None."""
+    assert get_rate_plan_for_date("rate_8", date(2025, 7, 22)) is None
+    assert get_rate_plan_for_date("rate_8", date(2025, 7, 23)) is RATE_8_2025
+    assert get_rate_plan_for_date("rate_8", date(2026, 6, 30)) is RATE_8_2025
+    assert get_rate_plan_for_date("rate_8", date(2026, 7, 1)) is RATE_8
+    assert get_rate_plan_for_date("rate_8", date(2030, 1, 1)) is RATE_8
+    assert get_rate_plan_for_date("rate_2", date(2025, 8, 1)) is None
+    assert get_rate_plan_for_date("not_a_rate", date(2026, 8, 1)) is None

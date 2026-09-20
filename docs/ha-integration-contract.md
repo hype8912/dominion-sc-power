@@ -35,7 +35,7 @@ async with aiohttp.ClientSession(cookie_jar=create_cookie_jar()) as session:
 
 **Optional `pilot_id` override:** `DominionSC` also accepts a `pilot_id: str | None = None` keyword argument that overrides the Bidgely multi-tenant pilot ID (`const.BIDGELY_PILOT_ID`) for this instance. The HA integration should only need this if Dominion re-routes an account to a different Bidgely pipeline; leave it unset otherwise.
 
-**HA note:** The library docstring for `DominionSC.__init__` states *"Do not modify default headers since Home Assistant that uses this library needs to use a default session for all integrations."* The library adds headers per-request rather than on the session, specifically to avoid interfering with HA's shared session pattern.
+**HA note:** A comment in `DominionSC.__init__` states *"Do not modify default headers since Home Assistant that uses this library needs to use a default session for all integrations."* The library adds headers per-request rather than on the session, specifically to avoid interfering with HA's shared session pattern.
 
 ---
 
@@ -67,7 +67,7 @@ After a successful login, the following attributes are populated and used by sub
 | `client.user_id` | `str` | Bidgely user ID. Embedded in the `gb-download` URL. |
 | `client.accounts` | `list` | Legacy `[[types], address]` list. See [async_get_accounts()](#async_get_accounts--account-list). |
 
-These attributes start as `None` / `[]` and are set only after `async_login()` succeeds. Any call to a data-retrieval method before login will raise `InvalidAuth`.
+These attributes start as `None` / `[]` and are set only after `async_login()` succeeds. Calling `async_get_forecast()`, `async_get_register_reads()`, or `async_get_usage_reads()` before login raises `InvalidAuth`. `async_get_accounts()` does not raise; it returns the empty `[]` until login succeeds.
 
 ### TFA flow
 
@@ -103,7 +103,7 @@ measurement_types, service_address = result
 
 ### Invariants the HA integration can rely on
 
-- Always returns exactly 2 elements.
+- After a successful login, always returns exactly 2 elements (before login it returns an empty list).
 - `measurement_types` contains only `"ELECTRIC"` and/or `"GAS"` — no other strings will appear.
 - `measurement_types` is never empty after a successful login (an account with no service types would not have been able to log in).
 - `service_address` is always a non-empty string after a successful login.
@@ -227,10 +227,10 @@ The ESPI `flowDirection` field is intended to indicate whether a register measur
 
 Instead, distinguish registers by `usage_point_id` (which is stable) or by the sign of the `consumption` values (solar-export registers carry consistently negative values in practice — though this is a heuristic, not a guaranteed invariant).
 
-### Date range behaviour
+### Date range behavior
 
 - The time component of `start_date` and `end_date` is **ignored**. Both are floored to midnight in the utility's local timezone (`America/New_York`).
-- Pass `datetime` objects (not `date`). Using `date` objects will raise `TypeError`.
+- Pass `datetime` objects; that is the annotated type. Both arguments are required — omitting either raises `ValueError`.
 - Data availability: Bidgely typically provides the last 12-13 months. Requests beyond that return empty lists.
 - Data latency: readings are typically delayed 24-48 hours. Data for yesterday may not yet be available.
 
@@ -261,7 +261,7 @@ reads = await client.async_get_usage_reads(account, start_date, end_date)
 # returns: list[UsageRead]
 ```
 
-This is a flattened convenience wrapper around `async_get_register_reads()`. It concatenates readings from all registers into a single list.
+This is a flattened convenience method that returns the same readings as `async_get_register_reads()`, concatenated from all registers into a single list.
 
 **Use this only for single-register accounts** (standard electric with no solar, or gas). For net-metered solar accounts, this merges grid-delivery and solar-export readings into one list with overlapping timestamps and mixed positive/negative values, making it impossible to distinguish the two registers.
 
@@ -283,6 +283,7 @@ from dominionsc import (
     RESIDENTIAL_ELECTRIC_RATE_PLANS,
     RESIDENTIAL_GAS_RATE_PLANS,
     # Individual plan constants (if needed):
+    RATE_1,
     RATE_2,
     RATE_5,
     RATE_6,
@@ -290,6 +291,10 @@ from dominionsc import (
     RATE_8,  # electric
     RATE_32S,
     RATE_32V,  # gas
+    # Historical lookups:
+    get_rate_plan_history,
+    get_rate_plan_for_date,
+    RATE_PLAN_HISTORY,  # every known period per code, oldest first
 )
 ```
 
@@ -297,6 +302,7 @@ from dominionsc import (
 
 | Code | Commodity | Name | Who it applies to |
 |------|-----------|------|-------------------|
+| `"rate_1"` | Electric | Good Cents Rate | Closed to new customers since January 15, 1996; only dwellings already certified under the Good Cents Program remain on it |
 | `"rate_2"` | Electric | Low Use Residential Service | Low-usage customers (≤400 kWh each of prior 12 months) |
 | `"rate_5"` | Electric | Time of Use | Customers who can shift usage away from peak hours |
 | `"rate_6"` | Electric | Energy Saver / Conservation Rate | Energy-efficient homes meeting insulation/equipment requirements |
@@ -308,6 +314,8 @@ from dominionsc import (
 ### Lookup
 
 ```python
+from datetime import date
+
 # Look up by code (returns None for unknown codes)
 plan = get_rate_plan("rate_8")
 
@@ -317,7 +325,15 @@ for plan in get_available_rate_plans():
 
 # Filter by commodity
 electric_plans = [p for p in get_available_rate_plans() if p.commodity == "electricity"]
+
+# Price historical usage: the plan in effect on a past date (None if none is recorded)
+past_plan = get_rate_plan_for_date("rate_8", date(2025, 9, 1))
+
+# Every known period for a code, oldest first (the last entry is the current plan)
+periods = get_rate_plan_history("rate_8")
 ```
+
+`get_rate_plan()` and `get_available_rate_plans()` return **current** plans only. Older periods (currently `rate_6` and `rate_8`, effective 2025-07-23 to 2026-06-30) are reachable only through the history lookups, and they carry only the usage charge because the fixed charges then in force were not recorded. For any other code, `get_rate_plan_for_date()` returns `None` for dates before its current plan's `effective_from`.
 
 ### `RatePlan` fields the HA integration will use
 

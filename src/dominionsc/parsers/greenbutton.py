@@ -40,7 +40,7 @@ def _ensure_list(value: object) -> list[Any]:
     """Wrap a single xmltodict dict in a list if needed.
 
     xmltodict returns a dict for a single child element and a list for
-    multiple. This normalises both cases so callers always iterate.
+    multiple. This normalizes both cases so callers always iterate.
     """
     if isinstance(value, list):
         return value

@@ -172,12 +172,12 @@ Retrieve interval meter readings grouped by physical register (ESPI UsagePoint).
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `account` | `str` | The measurement type to query: `"ELECTRIC"` or `"GAS"`. Use values from `measurement_types` returned by `async_get_accounts()`. |
-| `start_date` | `datetime \| None` | Start of the requested window. The time component is ignored — the library floors to midnight in the utility's local timezone. |
-| `end_date` | `datetime \| None` | End of the requested window. Same flooring applies. |
+| `start_date` | `datetime \| None` | Start of the requested window. Required despite the `None` default (see **Raises**). The time component is ignored — the library floors to midnight in the utility's local timezone. |
+| `end_date` | `datetime \| None` | End of the requested window. Required; the same flooring applies. |
 
 **Returns:** `list[RegisterReads]` — one `RegisterReads` per distinct ESPI UsagePoint. Most accounts return a one-element list. Net-metered solar accounts return two elements (grid delivery and solar export).
 
-**Raises:** `CannotConnect`, `ApiException`.
+**Raises:** `ValueError` if `start_date` or `end_date` is `None`. `InvalidAuth` if called before a successful `async_login()`. `CannotConnect`, `ApiException`.
 
 **Example:**
 
@@ -214,7 +214,7 @@ Retrieve interval meter readings as a flat list, merging all registers.
 
 **Warning:** For net-metered solar accounts, this merges grid-delivery and solar-export readings into one list with overlapping timestamps. Use `async_get_register_reads()` instead if per-register separation matters.
 
-**Raises:** `CannotConnect`, `ApiException`.
+**Raises:** The same exceptions as [`async_get_register_reads()`](#async_get_register_reads): `ValueError`, `InvalidAuth`, `CannotConnect`, `ApiException`.
 
 ---
 
@@ -282,7 +282,7 @@ Trigger delivery of a TFA code to the selected option (SMS or email).
 ### `async_submit_tfa_code()`
 
 ```python
-await handler.async_submit_tfa_code(code: str) -> dict[str, str] | None
+await handler.async_submit_tfa_code(code: str) -> dict[str, str]
 ```
 
 Submit the security code the user received.
@@ -339,7 +339,7 @@ A single interval meter reading.
 ### RegisterReads
 
 ```python
-from dominionsc.models.register_reads import RegisterReads
+from dominionsc import RegisterReads
 ```
 
 Interval readings grouped by physical meter register (ESPI UsagePoint).
@@ -393,10 +393,11 @@ Raised when a network-level failure prevents the request from completing. This i
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `message` | `str` | Human-readable error message (from `str(exception)`). |
 | `url` | `str \| None` | The URL that was being requested. |
 | `status` | `int \| None` | HTTP status code, if a response was received. |
 | `response_text` | `str \| None` | Response body text, if available. |
+
+`str(err)` returns the message followed by the URL, status, and response text on separate lines, for whichever of those are set.
 
 ### `InvalidAuth`
 
@@ -416,9 +417,9 @@ Raised when the API returns a response (network was fine) but the response canno
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `url` | `str` | The URL whose response triggered the error. |
+| `url` | `str \| None` | The URL whose response triggered the error. |
 | `status` | `int \| None` | HTTP status code. |
-| `response_text` | `str \| None` | Raw response body for debugging. |
+| `response_text` | `str \| None` | Raw response body for debugging. Not every error sets it (for example, forecast structure errors carry only the URL). |
 
 **Recommended exception handling pattern:**
 
@@ -518,7 +519,7 @@ for charge in rate_plan.charges:
 Maps `Season.SUMMER` and `Season.WINTER` to a tuple of `UsageTier`:
 
 ```python
-tiered = rate_plan.charges[2]  # TieredUsageCharge
+tiered = next(c for c in rate_plan.charges if c.kind == "tiered_usage")  # TieredUsageCharge
 summer_tiers = tiered.tiers_by_season[Season.SUMMER]
 for tier in summer_tiers:
     print(f"{tier.name}: ${tier.price_per_unit}/kWh up to {tier.upper_bound or '∞'} kWh")
@@ -529,7 +530,7 @@ for tier in summer_tiers:
 Maps `Season` to a tuple of `TimeOfUsePeriod`:
 
 ```python
-tou = rate_plan.charges[1]  # TimeOfUseCharge
+tou = next(c for c in rate_plan.charges if c.kind == "time_of_use")  # TimeOfUseCharge
 summer_periods = tou.periods_by_season[Season.SUMMER]
 for period in summer_periods:
     if period.fallback:
@@ -607,6 +608,20 @@ from dominionsc import (
 | `RESIDENTIAL_ELECTRIC_RATE_PLANS` | `Mapping[str, RatePlan]` | All electric plans keyed by code. Read-only. |
 | `RESIDENTIAL_GAS_RATE_PLANS` | `Mapping[str, RatePlan]` | All gas plans keyed by code. Read-only. |
 | `RESIDENTIAL_RATE_PLANS` | `Mapping[str, RatePlan]` | All plans (electric + gas) keyed by code. Read-only. |
+| `RATE_PLAN_HISTORY` | `Mapping[str, tuple[RatePlan, ...]]` | Every known tariff period per code, oldest first; the last entry is the current plan. Codes with no superseded periods map to a one-element tuple. Read-only. |
+
+#### Superseded tariff periods
+
+```python
+from dominionsc import RATE_6_2025, RATE_8_2025, RATE_PLAN_HISTORY
+```
+
+| Constant | Code | Effective |
+|----------|------|-----------|
+| `RATE_6_2025` | `"rate_6"` | 2025-07-23 to 2026-06-30 |
+| `RATE_8_2025` | `"rate_8"` | 2025-07-23 to 2026-06-30 |
+
+These carry `effective_to` and hold only the usage charge (no fixed charges) and the electric adjustments, because the fixed charges in force at the time were not recorded. They are **not** included in `RESIDENTIAL_*_RATE_PLANS`, `get_rate_plan()`, or `get_available_rate_plans()`; reach them through `RATE_PLAN_HISTORY` or the lookup functions below.
 
 ---
 
@@ -632,7 +647,39 @@ for plan in plans:
     print(f"{plan.code}: {plan.name} ({plan.commodity})")
 ```
 
-Return all catalogued residential rate plans as a tuple.
+Return all cataloged residential rate plans as a tuple. Only current plans
+are returned; superseded tariff periods are available via the history lookups
+below.
+
+#### `get_rate_plan_history()`
+
+```python
+from dominionsc import get_rate_plan_history
+
+get_rate_plan_history("rate_8")  # -> (RATE_8_2025, RATE_8)
+```
+
+Return every known tariff period for a rate code as a tuple, oldest first. The
+last entry is the current plan. Returns an empty tuple for unknown codes.
+See [Superseded tariff periods](#superseded-tariff-periods) for what the older
+entries contain (usage charge only).
+
+#### `get_rate_plan_for_date()`
+
+```python
+from datetime import date
+from dominionsc import get_rate_plan_for_date
+
+plan = get_rate_plan_for_date("rate_8", date(2025, 9, 1))  # -> RatePlan | None
+```
+
+Return the plan for a code that was in effect on the given date. Period
+boundaries are inclusive: a plan applies from `effective_from` through
+`effective_to`, and a plan with `effective_to=None` applies from `effective_from`
+onward. Returns `None` when the code is unknown or the date falls before the
+earliest recorded period (or in a gap between periods). For example,
+`get_rate_plan_for_date("rate_2", date(2025, 8, 1))` is `None` because `rate_2`
+has no recorded period before July 1, 2026.
 
 ---
 

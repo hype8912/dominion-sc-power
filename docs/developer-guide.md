@@ -41,6 +41,7 @@ dominion-sc-power/
 ├── CONTRIBUTING.md         # Developer setup and workflow
 │
 ├── src/dominionsc/         # Main package source code
+│   ├── py.typed            # PEP 561 marker: the package ships inline type information
 │   ├── __init__.py         # Public API surface — what callers import
 │   ├── __main__.py         # `python -m dominionsc` entry point
 │   ├── client.py           # DominionSC: the main class callers use
@@ -69,7 +70,8 @@ dominion-sc-power/
 ├── tests/
 │   ├── conftest.py
 │   ├── fixtures/
-│   │   └── greenbutton_multi_register.xml
+│   │   ├── greenbutton_multi_register.xml
+│   │   └── greenbutton_gas_scaled.xml
 │   ├── test_dominionsc.py
 │   ├── test_parsers.py
 │   ├── test_cli.py
@@ -86,9 +88,13 @@ dominion-sc-power/
 ├── docs/
 │   ├── developer-guide.md  # This file
 │   ├── api-reference.md    # Full public API reference
+│   ├── ha-integration-contract.md  # What ha-dominion-sc can rely on
 │   ├── troubleshooting.md  # Common errors and solutions
 │   ├── CHANGELOG.md
+│   ├── REFACTOR_PLAN.md    # Historical record of the modularization refactor
 │   └── architecture/       # Mermaid architecture diagrams
+│
+├── .github/workflows/      # CI: lint.yml, test.yaml, python-publish.yaml
 │
 └── scripts/
     ├── setup               # Creates .venv via uv sync
@@ -139,14 +145,14 @@ uv run ruff format .                              # auto-format
 uv run ruff check . --fix                         # lint + apply safe fixes
 uv run ruff check .                               # lint only (no changes)
 
-# Type checking
-uv run mypy src/dominionsc
+# Type checking (mypy is not a dev dependency; uv installs it on demand)
+uv run --with mypy mypy src/dominionsc
 
 # Build (creates dist/ — don't commit it)
 uv build
 ```
 
-The `./scripts/lint` and `./scripts/test` wrappers run the same commands above.
+The `./scripts/lint` and `./scripts/test` wrappers run the formatting, lint, and test commands above (not mypy).
 
 ---
 
@@ -166,7 +172,7 @@ registers = await client.async_get_register_reads("ELECTRIC", start, end)
 
 ### Step 2: Login (`async_login`)
 
-`async_login` delegates to `LoginFlow.execute()` in `auth.py`. The login sequence has 9 HTTP requests:
+`async_login` delegates to `LoginFlow.execute()` in `auth.py`. A complete login makes 8 HTTP requests. Request #3 is skipped when no TFA token is saved, and if there is no valid token the flow raises `MfaChallenge` at that point, before request #4:
 
 | # | Method | Endpoint | Purpose |
 |---|--------|----------|---------|
@@ -224,10 +230,11 @@ The Green Button ESPI XML has this general shape:
 
 The parser:
 1. Converts the XML to a dict using `xmltodict`.
-2. Filters entries to those with title `"Interval Consumption"`.
-3. Extracts the UsagePoint ID from the `<link href>` path using a regex.
-4. Groups all entries by UsagePoint ID into `RegisterReads` objects.
-5. Converts UTC epoch seconds to timezone-aware `datetime` objects.
+2. Determines the scale factor for the whole feed from the `powerOfTenMultiplier` declared on the `ReadingType` entries (`10 ** multiplier`; no multiplier means 1). Dominion's gas feed reports cubic feet with a multiplier of `-3`, so raw values are thousandths of a cubic foot and must be scaled. Electric feeds declare no multiplier. If a feed declares more than one distinct multiplier, no scaling is applied and a warning is logged.
+3. Filters entries to those whose title starts with `"Interval Consumption"`.
+4. Extracts the UsagePoint ID from the `<link href>` path using a regex.
+5. Groups all entries by UsagePoint ID into `RegisterReads` objects.
+6. Converts UTC epoch seconds to timezone-aware `datetime` objects and multiplies each raw value by the scale factor.
 
 The `_ensure_list()` helper normalizes `xmltodict`'s behavior: it returns a `dict` when there is only one child element, but a `list` when there are multiple. Calling `_ensure_list()` makes callers work correctly in both cases.
 
@@ -307,7 +314,7 @@ All pure data with no business logic.
 | `Forecast` | `start_date`, `end_date`, `cost_to_date`, `forecasted_cost`, `typical_cost: float \| None` |
 | `AccountInfo` | `measurement_types`, `service_address_and_account_no`; `to_legacy_list()` |
 
-**Rate plan models** (`models/rate_plan.py`) — see the `rates.py` section above for the full type hierarchy:
+**Rate plan models** (`models/rate_plan.py`) — see the `models/rate_plan.py` section below for the full type hierarchy:
 
 | Model | Role |
 |-------|------|
@@ -329,15 +336,18 @@ All pure data with no business logic.
 
 ### `rates.py` — Rate plan catalog
 
-Declarative, hard-coded definitions of all current Dominion Energy SC residential tariffs (effective July 1, 2026). No network calls, no parsing — purely data. The plan constants (`RATE_2`, `RATE_5`, etc.) are assembled from types defined in `models/rate_plan.py` and stored in three read-only `MappingProxyType` dicts:
+Declarative, hard-coded definitions of all current Dominion Energy SC residential tariffs (effective July 1, 2026), plus archived earlier periods for some plans. No network calls, no parsing — purely data. The plan constants (`RATE_1`, `RATE_2`, etc.) are assembled from types defined in `models/rate_plan.py` and stored in four read-only `MappingProxyType` mappings:
 
 | Name | Contents |
 |------|----------|
-| `RESIDENTIAL_ELECTRIC_RATE_PLANS` | Rate 1, 2, 5, 6, 7, 8 — keyed by code string |
-| `RESIDENTIAL_GAS_RATE_PLANS` | Rate 32S, 32V — keyed by code string |
+| `RESIDENTIAL_ELECTRIC_RATE_PLANS` | Rate 1, 2, 5, 6, 7, 8 — current plans, keyed by code string |
+| `RESIDENTIAL_GAS_RATE_PLANS` | Rate 32S, 32V — current plans, keyed by code string |
 | `RESIDENTIAL_RATE_PLANS` | All of the above merged |
+| `RATE_PLAN_HISTORY` | Every known period per code as a tuple, oldest first; the last entry is the current plan |
 
-**Lookup functions:** `get_rate_plan(code)` returns a `RatePlan | None`; `get_available_rate_plans()` returns a `tuple[RatePlan, ...]` of all plans.
+**Lookup functions:** `get_rate_plan(code)` returns a `RatePlan | None`; `get_available_rate_plans()` returns a `tuple[RatePlan, ...]` of all current plans. Superseded periods live in `RATE_PLAN_HISTORY`; use `get_rate_plan_history(code)` or `get_rate_plan_for_date(code, on)` to price historical usage.
+
+**Superseded periods:** `RATE_6_2025` and `RATE_8_2025` (effective 2025-07-23 to 2026-06-30, `effective_to` set) hold the prior Rate 6 and Rate 8 usage charges. They carry no fixed charges because those were not recorded, and they are not in the three `RESIDENTIAL_*` mappings.
 
 **Rate plan breakdown:**
 
@@ -413,7 +423,7 @@ uv run pytest --cov=dominionsc --cov-report=term-missing
 | `test_dominionsc.py` | `DominionSC`, `DominionSCURLHandler`, `DominionSCTFAHandler` | Mocks HTTP via `AsyncMock`/`patch` |
 | `test_parsers.py` | `parse_registers()`, `parse_usage_reads()`, `parse_forecast()` | Pure/fixture-based |
 | `test_cli.py` | `build_parser()`, `run()`, `_handle_mfa()` | Mocked async |
-| `test_rates.py` | Rate plan catalog | Pure assertions |
+| `test_rates.py` | Rate plan catalog, superseded periods, and history lookups | Pure assertions |
 | `test_helpers.py` | `create_cookie_jar()` | Pure assertions |
 | `test_headers.py` | All header builder functions | Pure assertions |
 | `test_urls.py` | All URL builder functions | Pure assertions with mocked `cache_buster` |
@@ -425,7 +435,7 @@ uv run pytest --cov=dominionsc --cov-report=term-missing
 
 ### Test fixtures
 
-`tests/fixtures/greenbutton_multi_register.xml` is a redacted real-structure Green Button XML with two UsagePoints (grid delivery and solar export). Use it to test multi-register parsing. If you add new parsing behaviour, add a corresponding fixture or extend the XML.
+`tests/fixtures/greenbutton_multi_register.xml` is a redacted real-structure Green Button XML with two UsagePoints (grid delivery and solar export). Use it to test multi-register parsing. `tests/fixtures/greenbutton_gas_scaled.xml` is a gas feed whose `ReadingType` declares `powerOfTenMultiplier=-3`; it covers the consumption scaling described above. If you add new parsing behavior, add a corresponding fixture or extend the XML.
 
 ### Mocking HTTP
 
@@ -459,9 +469,11 @@ Rate plans are defined in `src/dominionsc/rates.py` using types from `src/domini
 
 **When rates change (price adjustments only):**
 
-1. Update `_EFFECTIVE_FROM = date(YYYY, 7, 1)` at the top of `rates.py`.
-2. Update the `Decimal` amounts in the affected `RATE_*` constants (e.g., `DailyCharge(amount=Decimal("0.36164"))`).
-3. Update `tests/test_rates.py` — find the assertions for the changed plan and update the expected values.
+1. Archive the outgoing values first so historical usage can still be priced. Copy each affected plan to a new constant (for example `RATE_8_2026`) with `effective_from` set to the old `_EFFECTIVE_FROM` and `effective_to` set to the day before the new one. Add it to the tuple used to build `RATE_PLAN_HISTORY` (each code's entries must stay oldest first), and export it from `__init__.py` and `__all__`. The existing `RATE_6_2025` and `RATE_8_2025` share `_PRIOR_EFFECTIVE_FROM` and `_PRIOR_EFFECTIVE_TO`, so give a newly archived period its own dates.
+2. Update `_EFFECTIVE_FROM = date(YYYY, 7, 1)` at the top of `rates.py`.
+3. Update the `Decimal` amounts in the affected `RATE_*` constants (e.g., `DailyCharge(amount=Decimal("0.36164"))`).
+4. Update `tests/test_rates.py` — find the assertions for the changed plan and update the expected values, and add tests for the archived period.
+5. Update the effective dates and any changed plan details in `docs/api-reference.md` and `docs/ha-integration-contract.md`, and add a `docs/CHANGELOG.md` entry.
 
 **When a new charge type or structure is added:**
 
@@ -475,17 +487,18 @@ Rate plans are defined in `src/dominionsc/rates.py` using types from `src/domini
 **When a new plan is added:**
 
 1. Define a new `RATE_XX = RatePlan(...)` constant in `rates.py`.
-2. Add it to the appropriate dict (`RESIDENTIAL_ELECTRIC_RATE_PLANS` or `RESIDENTIAL_GAS_RATE_PLANS`).
+2. Add it to the appropriate mapping (`RESIDENTIAL_ELECTRIC_RATE_PLANS` or `RESIDENTIAL_GAS_RATE_PLANS`). `RATE_PLAN_HISTORY` picks it up automatically.
 3. Export the new constant from `__init__.py` and `__all__`.
 4. Add tests in `test_rates.py`.
-5. Document it in `docs/api-reference.md` under the rate plan catalog table.
+5. Document it in `docs/api-reference.md` under the rate plan catalog table, and in `docs/ha-integration-contract.md`.
 
 **When a plan is removed or superseded:**
 
-1. Remove the constant from `rates.py` and from the relevant dict.
-2. Remove the export from `__init__.py` and `__all__`.
-3. If the `effective_to` date is known, set it rather than deleting the constant — this preserves the historical record.
-4. Update `tests/test_rates.py` and `docs/api-reference.md`.
+1. Set `effective_to` on the constant rather than deleting it — this preserves the historical record.
+2. Remove it from the relevant `RESIDENTIAL_*` mapping so it no longer appears as a current plan.
+3. `RATE_PLAN_HISTORY` is built from `RESIDENTIAL_RATE_PLANS`, so a plan removed from the current mappings drops out of the history unless you add it to `RATE_PLAN_HISTORY` explicitly. Adjust that mapping so the code still resolves through `get_rate_plan_history()` and `get_rate_plan_for_date()`.
+4. Keep the export in `__init__.py` and `__all__` while callers may still price historical usage with the constant.
+5. Update `tests/test_rates.py` and `docs/api-reference.md`.
 
 Rate plans are purely declarative data — changing them does not affect the API communication logic.
 
@@ -536,5 +549,5 @@ The ESPI specification includes a `flowDirection` field to indicate whether a re
 | `async_get_accounts()` returns a legacy list format | `client.py` | Needs coordinated breaking-change update with `ha-dominion-sc` |
 | Single-account constraint is hard-coded | `auth.py` | Multi-account support unknown; report if you encounter it |
 | TFA is always expected | `auth.py` | Accounts without TFA raise `InvalidAuth`; report if you encounter it |
-| Bidgely pilot ID is hard-coded | `const.py` | Ideally discovered per-account; see note in `const.py` |
+| Bidgely pilot ID default is hard-coded | `const.py` | Ideally discovered per account; callers can override it per instance with the `pilot_id` constructor argument. See the note in `const.py` |
 | Data is delayed 24–48 hours | External | Bidgely's metering pipeline delay; nothing the library can change |

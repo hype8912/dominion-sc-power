@@ -2,10 +2,10 @@
 
 ## Build & Package Structure (Grounded)
 
-- `pyproject.toml` — package metadata, dependencies (`aiohttp`, etc.), dev extras, build-system (`setuptools`), tool configs (`ruff`, `pytest`).
-- `uv.lock` — reproducible lockfile (27,710 bytes; committed).
+- `pyproject.toml` — package metadata, runtime dependencies (`aiohttp`, `tzdata`, `xmltodict`), the `dev` optional extra, build-system (`setuptools`), package data (`py.typed`), and tool configs (`ruff`, `pytest`, `mypy`, coverage).
+- `uv.lock` — reproducible lockfile (committed).
 - `.venv/` — virtualenv managed by `uv`; not committed (`.gitignore`).
-- `scripts/setup` — setup helper.
+- `scripts/setup` — creates or updates `.venv` with `uv sync --extra dev`; `scripts/lint` and `scripts/test` wrap Ruff and pytest.
 - `src/dominionsc/` — source layout (not flat).
 
 ## CI/CD Pipeline Diagram
@@ -13,8 +13,8 @@
 ```mermaid
 flowchart LR
     subgraph CI["GitHub Actions (.github/workflows/)"]
-        Lint["lint.yml"]
-        Test["test.yaml"]
+        Lint["lint.yml (ruff)"]
+        Test["test.yaml (pytest + coverage)"]
         Publish["python-publish.yaml"]
     end
 
@@ -24,10 +24,9 @@ flowchart LR
         Ruff["ruff check ."]
     end
 
-    Push["git push"] --> CI
-    CI --> Lint --> Pass?
-    Pass? --> Test --> Pass2?
-    Pass2? --> Publish --> PyPI
+    Push["push / pull request"] --> Lint
+    Push --> Test
+    Release["GitHub release published"] --> Publish --> PyPI["PyPI"]
 
     Dev --> UV --> Pytest --> Ruff
 ```
@@ -43,8 +42,8 @@ flowchart TB
     end
 
     subgraph Build["Build / CI"]
-        Package["pyproject.toml + egg-info"]
-        Wheel["built dist/"]
+        Package["pyproject.toml (setuptools)"]
+        Wheel["built dist/ (sdist + wheel)"]
     end
 
     subgraph Registry["Distribution"]
@@ -57,13 +56,14 @@ flowchart TB
 
     Source --> Package
     Lock --> Venv
-    Venv --> Pytest
     Package --> Wheel --> PyPI --> HA_Integration
 ```
 
 ## Test Strategy (Grounded)
 
-- `tests/` directory present; `pytest` used.
-- Coverage reported (`.coverage`, `htmlcov/`).
-- `test.yaml` runs on push/PR.
-- `lint.yml` runs `ruff`.
+- `tests/` directory present; `pytest` (with `pytest-asyncio` in `auto` mode) is used, with fixtures in `tests/fixtures/`.
+- Coverage is reported through `pytest-cov`; the HTML report is written to `htmlcov/`, which is not committed.
+- `test.yaml` runs on push and pull request, on Python 3.13.
+- `lint.yml` runs `ruff` (lint and format check) on push and pull request, on Python 3.11.
+- `python-publish.yaml` builds the distributions and publishes them to PyPI when a GitHub release is published.
+- CI installs dependencies with pip; local development uses uv.

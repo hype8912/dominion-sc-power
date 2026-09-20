@@ -1,6 +1,8 @@
 # Refactor Plan — `dominion-sc-power`
 
-**Status:** All phases complete (2026-09-05)
+**Status:** All phases complete (2026-09-05). This document is a point-in-time record of the modularization
+refactor; the test counts and coverage figures below are as of that date. Later changes (register-aware reads,
+the rate plan catalog, the gas scaling fix) are recorded in [CHANGELOG.md](CHANGELOG.md).
 **Written against:** working tree state of 2026-09-05, after `Forecast` / `UsageRead`
 were extracted into `forecast.py` / `usage_read.py`, and after the
 `BIDGELY_PILOT_ID` + timezone fixes were applied.
@@ -31,7 +33,7 @@ This is not a style complaint. It cost real debugging time:
 The goal of this refactor is that each of those three concerns can be read,
 tested, and changed independently.
 
-**Non-goals:** no behaviour changes, no new features, no dependency changes.
+**Non-goals:** no behavior changes, no new features, no dependency changes.
 Multi-register support is _enabled_ by this work but is tracked separately.
 
 ---
@@ -99,7 +101,7 @@ call?" Observed endpoints:
 - "fetch page, then `_find_verification_token`": 3 occurrences.
 
 **F5 — Parsing is welded to fetching.**
-`async_get_usage_reads` performs: date normalisation → timezone conversion →
+`async_get_usage_reads` performs: date normalization → timezone conversion →
 URL construction → HTTP GET → `xmltodict.parse` → object construction, in one
 method. `_async_get_forecast_internal` is the same pattern for JSON. Neither
 parser can be exercised without a live call or an HTTP mock.
@@ -143,7 +145,7 @@ src/dominionsc/
 ├── cli.py               # CLI logic, importable and testable
 ├── config.py            # UtilityConfig: endpoints, timezone, pilot id
 ├── const.py             # USER_AGENT, BIDGELY_PILOT_ID, defaults
-├── exceptions.py        # unchanged behaviour; stale import removed
+├── exceptions.py        # unchanged behavior; stale import removed
 ├── transport.py         # HttpClient — the ONLY place that performs I/O
 ├── headers.py           # header builders — single source of truth
 ├── urls.py              # endpoint builders — single source of truth
@@ -348,7 +350,7 @@ existing tests used two-reading fixtures that masked this entirely. The new
       directly via `pathlib.Path`).
 - [x] Tests green — 74/74.
 
-**Multi-register behaviour documented, not hidden:** the fixture and
+**Multi-register behavior documented, not hidden:** the fixture and
 `test_solar_export_negative_values_preserved` / `test_grid_delivery_values_preserved`
 explicitly document the current flattening: both registers land in one flat
 `list[UsageRead]` with overlapping timestamps and no register discriminator.
@@ -428,7 +430,7 @@ Addresses **F9**.
 - [x] CSV overwrite defect fixed: `open(args.csv, "w")` now called
       **once, outside** the `for account in measurement_types` loop.
       The original opened inside the loop with mode `"w"`, silently
-      overwriting every prior account\'s output on each iteration.
+      overwriting every prior account's output on each iteration.
 - [x] `accounts[0]` positional access in the original `__main__.py`
       replaced with explicit destructuring:
       `measurement_types, _service_addr = await async_get_accounts()`
@@ -437,7 +439,7 @@ Addresses **F9**.
 - [x] `tests/test_cli.py`: 11 tests covering argument parsing (7) and
       CSV writing (4) — zero network calls, zero credentials.
       Key test: `test_csv_not_overwritten_between_accounts` specifically
-      asserts both accounts\'s rows appear in one file.
+      asserts both accounts' rows appear in one file.
 
 **Coverage note:** `cli.py` sits at 46% — the uncovered paths are the
 interactive MFA flow (`_handle_mfa`) and the console-print branch when
@@ -447,10 +449,10 @@ path (CSV writing, multi-account, no overwrite) is fully covered.
 
 **Acceptance:**
 
-- [x] `__main__.py` coverage no longer 0% — it\'s now 0% of its own 3 lines
-      because the entry point isn\'t exercised directly, but `cli.py`\'s
+- [x] `__main__.py` coverage no longer 0% — it's now 0% of its own 3 lines
+      because the entry point isn't exercised directly, but `cli.py`'s
       `main()` is covered by the test suite via `run()`. The acceptance
-      criterion\'s intent (logic is testable) is fully met.
+      criterion's intent (logic is testable) is fully met.
 - [x] Multi-account runs produce one file containing all accounts —
       verified by `test_csv_not_overwritten_between_accounts`.
 
@@ -470,9 +472,9 @@ uv run python -c "import dominionsc; print(sorted(dominionsc.__all__))"
 
 **Separate the PRs.** If contributing upstream, send the bugfix
 (pilot ID + timezone) as its own small PR first. A tight bugfix merges quickly;
-the same fix buried inside a multi-file reorganisation stalls.
+the same fix buried inside a multi-file reorganization stalls.
 
-**Behaviour-preserving.** If a phase requires changing a test assertion, stop
+**Behavior-preserving.** If a phase requires changing a test assertion, stop
 and confirm the old assertion was wrong (as was the case for the hardcoded
 `"10106"` pilot-ID assertion) rather than adjusting the test to fit new code.
 
@@ -482,7 +484,7 @@ and confirm the old assertion was wrong (as was the case for the hardcoded
 
 | Risk                                     | Mitigation                                                                                                     |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Silent behaviour change during a move    | Move code verbatim first; refactor its internals in a separate commit                                          |
+| Silent behavior change during a move    | Move code verbatim first; refactor its internals in a separate commit                                          |
 | Hidden coupling surfaces mid-phase       | Phases are independently mergeable; stop and merge what works                                                  |
 | Breaking `ha-dominion-sc`                | Public-API check after each phase; Phase 4 decision made up front                                              |
 | Find/replace hitting the wrong duplicate | Verify every edit by line number, not by diff context alone — this already happened once with the pilot-ID fix |

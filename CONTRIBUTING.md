@@ -32,7 +32,7 @@ explicitly:
 
 ```bash
 uv venv
-source .venv/bin/activate  # On Windows: .venv\\Scripts\\activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install -e ".[dev]"
 ```
 
@@ -48,9 +48,9 @@ resolved versions. Commit both files when changing dependencies.
 uv add aiohttp
 uv remove aiohttp
 
-# Development-only dependency in the existing optional extra
-uv add --dev pytest
-uv remove --dev pytest
+# Development-only dependency in the existing "dev" optional extra
+uv add --optional dev pytest
+uv remove --optional dev pytest
 ```
 
 After changing dependencies, review the generated `pyproject.toml` and
@@ -92,8 +92,9 @@ uv run pytest
 uv run pytest tests/test_dominionsc.py -v
 uv run pytest -k "login" -v
 
-# Type checking, when working on typed code
-uv run mypy dominionsc
+# Type checking, when working on typed code (mypy is not a dev dependency,
+# so run it through uv's on-demand install)
+uv run --with mypy mypy src/dominionsc
 ```
 
 `./scripts/lint` formats the repository and applies safe Ruff fixes. Use
@@ -156,10 +157,12 @@ Before opening a pull request:
 
 1. Add or update tests for behavioral changes.
 2. Update `README.md` for user-facing changes.
-3. Update `CONTRIBUTING.md` when the developer workflow changes.
-4. Update `uv.lock` when dependencies change.
-5. Run `./scripts/lint` and `./scripts/test`.
-6. Review the diff for credentials, tokens, generated files, and unrelated
+3. Update the affected documents in `docs/` (for example `api-reference.md` for public API changes) and add an
+   entry to `docs/CHANGELOG.md`.
+4. Update `CONTRIBUTING.md` when the developer workflow changes.
+5. Update `uv.lock` when dependencies change.
+6. Run `./scripts/lint` and `./scripts/test`.
+7. Review the diff for credentials, tokens, generated files, and unrelated
    formatting changes.
 
 Never commit Dominion credentials, MFA codes, login data, or files containing

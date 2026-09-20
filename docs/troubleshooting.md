@@ -38,7 +38,7 @@ This guide covers common errors, their root causes, and how to resolve them.
 
 **Cause:** The Dominion account is linked to more than one service address. The library currently only supports single-account setups.
 
-**Fix:** This is a known limitation. Please open a GitHub issue and include the sanitised error output (remove any personal information). The issue is tracked in the [developer guide](developer-guide.md#known-limitations-and-technical-debt).
+**Fix:** This is a known limitation. Please open a GitHub issue and include the sanitized error output (remove any personal information). The issue is tracked in the [developer guide](developer-guide.md#known-limitations-and-technical-debt).
 
 ---
 
@@ -54,7 +54,7 @@ This guide covers common errors, their root causes, and how to resolve them.
 
 ### `CannotConnect: Cannot retrieve request verification token`
 
-**Symptom:** Login fails at the token extraction step, before any credentials are sent.
+**Symptom:** Login fails at a token extraction step: either on the login page fetch (before any credentials are sent) or on the authenticated home page fetch later in the login sequence.
 
 **Cause:** The login page HTML did not contain the expected `<input name="__RequestVerificationToken" ...>` element. This can happen if:
 - The Dominion portal changed its login page HTML structure.
@@ -94,7 +94,7 @@ This guide covers common errors, their root causes, and how to resolve them.
 
 **Symptom:** `CannotConnect` is raised and the error message mentions a timeout.
 
-**Cause:** The default timeout is 30 seconds. The Dominion or Bidgely API occasionally responds slowly.
+**Cause:** Login, TFA, and forecast requests use a 30-second timeout. Usage data requests do not set a timeout of their own, so they fall back to the `aiohttp` session's default. The Dominion or Bidgely API occasionally responds slowly.
 
 **Fix:**
 - `CannotConnect` is retryable — try again later.
@@ -111,11 +111,11 @@ This guide covers common errors, their root causes, and how to resolve them.
 **Cause:** The API returned a response the library could not parse. This typically means the Dominion or Bidgely API has changed its response format and the library needs updating.
 
 **Fix:**
-1. Check the `err.response_text` attribute — it contains the raw API response.
+1. Check the `err.response_text` attribute — it usually contains the raw API response. (The forecast parser's "Failed to decode forecast data." error carries only `err.url`; see [Forecast returns unexpected values](#forecast-returns-unexpected-values).)
 2. Open a GitHub issue and include:
    - The full exception message.
    - The `err.url` value.
-   - A sanitised (no personal info) copy of `err.response_text`.
+   - A sanitized (no personal info) copy of `err.response_text`.
 3. If you are a developer, compare `err.response_text` to the corresponding parser code in `src/dominionsc/parsers/` or `src/dominionsc/auth.py` and update the key paths.
 
 ---
@@ -128,7 +128,7 @@ This guide covers common errors, their root causes, and how to resolve them.
 - `typical_cost` is `None` when no prior-year data is available. This is normal early in a service relationship or after an account change.
 - The forecast is computed as `currentCostPerDay * numberOfDaysInCurrentBill`. If Dominion's API returns an unusual `currentCostPerDay`, the projected cost will be off.
 
-**Fix:** This is an API data issue, not a library bug. The raw API values are visible in `err.response_text` when parsing fails; for success cases, run the CLI with `-vv` to see debug logging.
+**Fix:** This is normally an API data issue, not a library bug. If parsing fails, `ApiException` reports "Failed to decode forecast data." with the request URL; the forecast parser does not attach the response body, so capture the `GetAccountAMIUsageAlerts` response from your browser's DevTools (Network tab) to inspect the raw values.
 
 ---
 
@@ -210,6 +210,16 @@ This guide covers common errors, their root causes, and how to resolve them.
 
 ---
 
+### Gas consumption values are 1000 times too large
+
+**Symptom:** Gas `consumption` values are far larger than your bill suggests (for example, roughly 500,000 ft³ for a 5 CCF billing period).
+
+**Cause:** Older versions of the library ignored the `powerOfTenMultiplier` that Dominion's gas feed declares (`-3`, so raw values are thousandths of a cubic foot) and returned the raw values as cubic feet. Electric data was never affected.
+
+**Fix:** Upgrade to a version that includes the fix (see the "Fixed" entry under Unreleased in the [changelog](CHANGELOG.md)). Values you already stored from an affected version need to be divided by 1000.
+
+---
+
 ### Wrong pilot ID / smoothed hourly data instead of 15-minute reads
 
 **Symptom:** Usage reads are in 1-hour intervals instead of 15-minute intervals, and values look averaged/smoothed rather than actual metered values.
@@ -231,10 +241,13 @@ This guide covers common errors, their root causes, and how to resolve them.
 
 **Fix:** Install the package in your environment:
 ```bash
-# With uv
+# As a user
+pip install dominion-sc-power
+
+# As a contributor, with uv
 uv sync --extra dev
 
-# With pip
+# As a contributor, with pip
 pip install -e ".[dev]"
 
 # Or run via uv run (no activation needed)
@@ -255,9 +268,9 @@ uv run python -m dominionsc --help
 
 **Symptom:** The CLI prompts for credentials even though they were passed as arguments.
 
-**Cause:** Argument names use underscores: `--username` and `--password`. Shell quoting or argument parsing issues can cause the values to be dropped.
+**Cause:** The CLI prompts whenever the value it receives is missing or empty. A common cause is a shell variable that is unset or empty, which expands to an empty string (for example `--password "$DOMINION_PASSWORD"`).
 
-**Fix:** Ensure the arguments are on the same line with no line breaks:
+**Fix:** Check that the values reach the CLI, and quote them so special characters in a password are not interpreted by the shell:
 ```bash
 python -m dominionsc --username "your@email.com" --password "your_password"
 ```
@@ -306,7 +319,7 @@ If errors remain after `--fix`, they require manual resolution. The error messag
 **Symptom:** The library works in the test suite but fails against the real API.
 
 **Fix:**
-1. Enable debug logging to see every HTTP request and response:
+1. Enable debug logging (the library logs a few debug messages, such as TFA option selection; it does not log full HTTP requests or responses):
    ```bash
    python -m dominionsc -vv
    ```

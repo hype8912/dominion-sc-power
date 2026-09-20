@@ -13,6 +13,8 @@ This library is used by the custom [Home Assistant Integration for Dominion Ener
 - Support for two-factor authentication (TFA)
 - Async/await architecture using aiohttp
 - Support for multiple energy sources (electric and gas)
+- Declarative residential rate plan catalog, including superseded tariff periods
+  for pricing historical usage
 
 ## Supported Rate Plans
 
@@ -38,19 +40,33 @@ residential tariffs (see [`src/dominionsc/rates.py`](src/dominionsc/rates.py)):
 | `rate_32v` | Rate 32V - Gas Residential Value Service |
 
 ```python
-from dominionsc import get_rate_plan, get_available_rate_plans
+from datetime import date
 
-plan = get_rate_plan("rate_8")
+from dominionsc import get_rate_plan, get_rate_plan_for_date
+
+plan = get_rate_plan("rate_8")  # the current plan
 print(plan.name)  # "Rate 8 - Residential Service"
+
+# The plan that was in effect on a past date (None if no plan is recorded for it)
+old_plan = get_rate_plan_for_date("rate_8", date(2025, 9, 1))
 ```
+
+`get_rate_plan()` and `get_available_rate_plans()` return current plans only.
+Superseded periods are available through `get_rate_plan_history()` and
+`get_rate_plan_for_date()`; see the [API reference](docs/api-reference.md#rate-plans).
 
 ## Limitations
 
-- Only one service address per Dominion account is currently supported (mainly because I do not know what the API responses look like for users with multiple service addresses) - you will get an error if this applies to you - please report the error under issues which should include the relevant API response
-- TFA is required (again mainly because I do not know what the flow without TFA looks like) - report this error under issues if it applies to you
-- Data is delayed by 24-48 hours as this is when it is reported by Dominion
+- Only one service address per Dominion account is currently supported, because the API responses for
+  accounts with multiple service addresses are not known. If this applies to you, you will get an error.
+  Please report it under issues and include the relevant API response.
+- TFA is required, because the login flow without TFA is not known. If this applies to you, please report the
+  error under issues.
+- Data is delayed by 24-48 hours, because that is when Dominion reports it.
 
 ## Installation
+
+Requires Python 3.11 or higher.
 
 ```bash
 pip install dominion-sc-power
@@ -63,6 +79,14 @@ workflow, testing, and the complete contribution checklist, see
 [CONTRIBUTING.md](CONTRIBUTING.md). For an in-depth tour of how the library
 is structured and how its pieces fit together, see the
 [Developer Guide](docs/developer-guide.md).
+
+## Documentation
+
+- [API reference](docs/api-reference.md): the complete public API
+- [Troubleshooting](docs/troubleshooting.md): common errors and how to resolve them
+- [Home Assistant integration contract](docs/ha-integration-contract.md): what `ha-dominion-sc` can rely on
+- [Architecture](docs/architecture/README.md): diagrams of the library's structure and data flow
+- [Changelog](docs/CHANGELOG.md)
 
 ## Command Line Interface
 
@@ -151,7 +175,8 @@ async def main():
             for register in registers:
                 print(f"{account} register {register.usage_point_id}:")
                 for reading in register.reads:
-                    print(f"  {reading.start_time}: {reading.consumption} Wh")
+                    # Wh for ELECTRIC, ft³ for GAS
+                    print(f"  {reading.start_time}: {reading.consumption}")
 
 
 asyncio.run(main())
@@ -176,9 +201,9 @@ for reading in usage:
 > registers apart. Use `async_get_register_reads()` if that distinction
 > matters to you.
 
-## Handling two-Factor Authentication (TFA)
+## Handling Two-Factor Authentication (TFA)
 
-If your account has TFA enabled (see limitations above), you'll need to handle the `MfaChallenge` exception:
+TFA is required (see [Limitations](#limitations)), so you need to handle the `MfaChallenge` exception when logging in:
 
 ```python
 from dominionsc import MfaChallenge, InvalidAuth
