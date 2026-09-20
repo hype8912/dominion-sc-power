@@ -333,7 +333,7 @@ past_plan = get_rate_plan_for_date("rate_8", date(2025, 9, 1))
 periods = get_rate_plan_history("rate_8")
 ```
 
-`get_rate_plan()` and `get_available_rate_plans()` return **current** plans only. Older periods (currently `rate_6` and `rate_8`, effective 2025-07-23 to 2026-06-30) are reachable only through the history lookups, and they carry only the usage charge because the fixed charges then in force were not recorded. For any other code, `get_rate_plan_for_date()` returns `None` for dates before its current plan's `effective_from`.
+`get_rate_plan()` and `get_available_rate_plans()` return **current** plans only. Older periods are reachable only through the history lookups. Every code except `rate_32s` has archived periods (for `rate_5` back to 2024-09-01; for `rate_32v` 2025-09-01 to 2026-06-30; for the others 2025-07-23 to 2026-06-30), and each is a complete plan including its fixed charges. `get_rate_plan_for_date()` returns `None` for dates before a code's earliest recorded `effective_from`, such as any date before 2025-07-23 for `rate_1` before 2025-09-01 for `rate_32v`, or before 2024-09-01 for `rate_5`.
 
 ### `RatePlan` fields the HA integration will use
 

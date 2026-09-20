@@ -17,7 +17,7 @@ RATE_32S: RatePlan = RatePlan(
         FlatUsageCharge(name="Energy", usage_unit=UsageUnit.THERM, price_per_unit=Decimal("2.04149")),
     ),
     adjustments=GAS_ADJUSTMENTS,
-    source_url="https://cdn-dominionenergy-prd-001.azureedge.net/-/media/content/rates-and-tariffs/pdfs/south-carolina/natural-gas/rates/rate32s.pdf?rev=4498fa411c8d4bd2a440ba808162354a"
+    source_url="https://cdn-dominionenergy-prd-001.azureedge.net/-/media/content/rates-and-tariffs/pdfs/south-carolina/natural-gas/rates/rate32s.pdf?rev=4498fa411c8d4bd2a440ba808162354a",
 )
 
 # Every known period, oldest first, ending with the current plan.

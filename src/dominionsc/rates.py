@@ -10,14 +10,14 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from .rate_plans import rate_1, rate_2, rate_5, rate_6, rate_7, rate_8, rate_32s, rate_32v
-from .rate_plans.rate_1 import RATE_1
-from .rate_plans.rate_2 import RATE_2
-from .rate_plans.rate_5 import RATE_5
+from .rate_plans.rate_1 import RATE_1, RATE_1_2025
+from .rate_plans.rate_2 import RATE_2, RATE_2_2025
+from .rate_plans.rate_5 import RATE_5, RATE_5_2024, RATE_5_2025
 from .rate_plans.rate_6 import RATE_6, RATE_6_2025
-from .rate_plans.rate_7 import RATE_7
+from .rate_plans.rate_7 import RATE_7, RATE_7_2025
 from .rate_plans.rate_8 import RATE_8, RATE_8_2025
 from .rate_plans.rate_32s import RATE_32S
-from .rate_plans.rate_32v import RATE_32V
+from .rate_plans.rate_32v import RATE_32V, RATE_32V_2025
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -27,15 +27,21 @@ if TYPE_CHECKING:
 
 __all__: list[str] = [
     "RATE_1",
+    "RATE_1_2025",
     "RATE_2",
+    "RATE_2_2025",
     "RATE_5",
+    "RATE_5_2024",
+    "RATE_5_2025",
     "RATE_6",
     "RATE_6_2025",
     "RATE_7",
+    "RATE_7_2025",
     "RATE_8",
     "RATE_8_2025",
     "RATE_32S",
     "RATE_32V",
+    "RATE_32V_2025",
     "RATE_PLAN_HISTORY",
     "RESIDENTIAL_ELECTRIC_RATE_PLANS",
     "RESIDENTIAL_GAS_RATE_PLANS",

@@ -614,15 +614,31 @@ from dominionsc import (
 #### Superseded tariff periods
 
 ```python
-from dominionsc import RATE_6_2025, RATE_8_2025, RATE_PLAN_HISTORY
+from dominionsc import (
+    RATE_1_2025,
+    RATE_2_2025,
+    RATE_5_2024,
+    RATE_5_2025,
+    RATE_6_2025,
+    RATE_7_2025,
+    RATE_8_2025,
+    RATE_32V_2025,
+    RATE_PLAN_HISTORY,
+)
 ```
 
 | Constant | Code | Effective |
 |----------|------|-----------|
+| `RATE_1_2025` | `"rate_1"` | 2025-07-23 to 2026-06-30 |
+| `RATE_2_2025` | `"rate_2"` | 2025-07-23 to 2026-06-30 |
+| `RATE_5_2024` | `"rate_5"` | 2024-09-01 to 2025-04-30 |
+| `RATE_5_2025` | `"rate_5"` | 2025-05-01 to 2026-06-30 |
 | `RATE_6_2025` | `"rate_6"` | 2025-07-23 to 2026-06-30 |
+| `RATE_7_2025` | `"rate_7"` | 2025-07-23 to 2026-06-30 |
 | `RATE_8_2025` | `"rate_8"` | 2025-07-23 to 2026-06-30 |
+| `RATE_32V_2025` | `"rate_32v"` | 2025-09-01 to 2026-06-30 |
 
-These carry `effective_to` and hold only the usage charge (no fixed charges) and the electric adjustments, because the fixed charges in force at the time were not recorded. They are **not** included in `RESIDENTIAL_*_RATE_PLANS`, `get_rate_plan()`, or `get_available_rate_plans()`; reach them through `RATE_PLAN_HISTORY` or the lookup functions below.
+These carry `effective_to` and a `source_url`. Each is a complete plan: the Basic Facilities Charge, the Distributed Energy Resource Program charge (electric plans), the usage / time-of-use / demand charges, and the adjustments. Rate 5's May 2025 tariff and July 23, 2025 revision publish the same prices, so they are the single period `RATE_5_2025`; the May tariff gives no calendar date ("first billing cycle of May 2025"), so it starts on 2025-05-01. Rate 32V's tariff is likewise effective from the "1st billing cycle of September 2025", so `RATE_32V_2025` starts on 2025-09-01. They are **not** included in `RESIDENTIAL_*_RATE_PLANS`, `get_rate_plan()`, or `get_available_rate_plans()`; reach them through `RATE_PLAN_HISTORY` or the lookup functions below.
 
 ---
 
@@ -658,12 +674,13 @@ below.
 from dominionsc import get_rate_plan_history
 
 get_rate_plan_history("rate_8")  # -> (RATE_8_2025, RATE_8)
+get_rate_plan_history("rate_5")  # -> (RATE_5_2024, RATE_5_2025, RATE_5)
 ```
 
 Return every known tariff period for a rate code as a tuple, oldest first. The
 last entry is the current plan. Returns an empty tuple for unknown codes.
-See [Superseded tariff periods](#superseded-tariff-periods) for what the older
-entries contain (usage charge only).
+See [Superseded tariff periods](#superseded-tariff-periods) for the archived
+entries.
 
 #### `get_rate_plan_for_date()`
 

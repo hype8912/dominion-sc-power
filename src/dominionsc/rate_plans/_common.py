@@ -1,9 +1,20 @@
 """Values shared by more than one rate plan module."""
 
+from datetime import time
 from decimal import Decimal
 from types import MappingProxyType
 
-from ..models.rate_plan import Adjustment, MonthlyCharge, Season, TieredUsageCharge, UsageTier, UsageUnit
+from ..models.rate_plan import (
+    Adjustment,
+    MonthlyCharge,
+    Season,
+    TieredUsageCharge,
+    TimeOfUseCharge,
+    TimeOfUsePeriod,
+    TimeWindow,
+    UsageTier,
+    UsageUnit,
+)
 
 ELECTRIC_ADJUSTMENTS: tuple[Adjustment, ...] = (
     Adjustment("fuel", "Fuel", "Included in the published energy charge; subject to adjustment.", True),
@@ -39,6 +50,31 @@ def seasonal_tiers(summer_under: str, summer_over: str, winter_under: str, winte
                 Season.WINTER: (
                     UsageTier("First 800 kWh", Decimal("800"), Decimal(winter_under)),
                     UsageTier("Over 800 kWh", None, Decimal(winter_over)),
+                ),
+            }
+        ),
+    )
+
+
+def time_of_use_charge(on_peak: str, off_peak: str, super_off_peak: str) -> TimeOfUseCharge:
+    """Build the on-peak / off-peak / super-off-peak energy charge shared by Rates 5 and 7."""
+    return TimeOfUseCharge(
+        name="Energy",
+        periods_by_season=MappingProxyType(
+            {
+                Season.SUMMER: (
+                    TimeOfUsePeriod("on_peak", Decimal(on_peak), (TimeWindow(time(16), time(20)),)),
+                    TimeOfUsePeriod("super_off_peak", Decimal(super_off_peak), (TimeWindow(time(1), time(5)),)),
+                    TimeOfUsePeriod("off_peak", Decimal(off_peak), fallback=True),
+                ),
+                Season.WINTER: (
+                    TimeOfUsePeriod("on_peak", Decimal(on_peak), (TimeWindow(time(6), time(9)),)),
+                    TimeOfUsePeriod(
+                        "super_off_peak",
+                        Decimal(super_off_peak),
+                        (TimeWindow(time(1), time(5)), TimeWindow(time(12), time(15))),
+                    ),
+                    TimeOfUsePeriod("off_peak", Decimal(off_peak), fallback=True),
                 ),
             }
         ),
