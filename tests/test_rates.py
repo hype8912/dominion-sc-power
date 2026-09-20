@@ -308,8 +308,12 @@ def test_rate_6_2025_values_and_dates():
     ]
 
 
+def _tou_charge(plan):
+    return next(c for c in plan.charges if isinstance(c, TimeOfUseCharge))
+
+
 def _tou_prices(plan, season):
-    charge = next(c for c in plan.charges if isinstance(c, TimeOfUseCharge))
+    charge = _tou_charge(plan)
     return {period.name: period.price_per_unit for period in charge.periods_by_season[season]}
 
 
@@ -325,7 +329,7 @@ def test_rate_5_archived_periods_values_and_dates():
         for season in (Season.SUMMER, Season.WINTER):
             assert _tou_prices(plan, season) == {name: Decimal(price) for name, price in prices.items()}
         assert plan.charges[:2] == RATE_5.charges[:2]
-        assert plan.charges[2].periods_by_season.keys() == RATE_5.charges[2].periods_by_season.keys()
+        assert _tou_charge(plan).periods_by_season.keys() == _tou_charge(RATE_5).periods_by_season.keys()
 
 
 def test_rate_7_2025_values_and_dates():
