@@ -19,7 +19,8 @@ src/dominionsc/
   forecast.py          # backward-compatible re-export of models.forecast.Forecast
   helpers.py           # create_cookie_jar()
   usage_read.py        # backward-compatible re-export of models.usage_read.UsageRead
-  rates.py             # declarative residential rate plan catalog, including superseded tariff periods
+  rates.py             # public rate plan entry point: assembles the plans, mappings, history, and lookups
+  rate_plans/          # one module per plan (rate_1.py ... rate_32v.py) plus _common.py for shared values
   __main__.py          # entry point delegating to cli.main()
 
   models/
@@ -58,6 +59,7 @@ flowchart LR
         Helpers["helpers.py"]
         UsageReadMod["usage_read.py"]
         Rates["rates.py"]
+        RatePlans["rate_plans/"]
         Main["__main__.py"]
     end
 
@@ -107,7 +109,8 @@ flowchart LR
     Parsers --> Exceptions
     CLI --> Init
     Main --> CLI
-    Rates --> M_RatePlan
+    Rates --> RatePlans
+    RatePlans --> M_RatePlan
 ```
 
 ## Component Responsibilities
@@ -126,5 +129,6 @@ flowchart LR
 | `parsers/greenbutton.py` | `parse_registers()`, `parse_usage_reads()` | Parses ESPI `UsagePoint` XML into register-level reads, applying the feed's `powerOfTenMultiplier` scaling |
 | `parsers/forecast.py` | `parse_forecast()` | Parses forecast responses into cost/projections |
 | `models/` | Dataclasses | Structured output (`AccountInfo`, `RegisterReads`, `UsageRead`, `Forecast`, `RatePlan`) |
-| `rates.py` | `RATE_1`...`RATE_8`, `RATE_32S`, `RATE_32V`, `RATE_6_2025`, `RATE_8_2025`, `RATE_PLAN_HISTORY`, `get_rate_plan()`, `get_rate_plan_history()`, `get_rate_plan_for_date()` | Declarative, hard-coded residential tariff catalog (current plans plus superseded periods); no network calls |
+| `rates.py` | `RATE_1`...`RATE_8`, `RATE_32S`, `RATE_32V`, `RATE_6_2025`, `RATE_8_2025`, `RATE_PLAN_HISTORY`, `get_rate_plan()`, `get_rate_plan_history()`, `get_rate_plan_for_date()` | Public entry point: assembles the per-plan modules into the catalog mappings, `RATE_PLAN_HISTORY`, and lookup functions; no network calls |
+| `rate_plans/` | `rate_1.py` ... `rate_32v.py`, `_common.py` | Declarative, hard-coded definition of each residential plan (current values, archived periods, and a `HISTORY` tuple), with shared values in `_common.py` |
 | `models/rate_plan.py` | `RatePlan`, `Charge` union | Discriminated-union type system (`DailyCharge`, `TieredUsageCharge`, `TimeOfUseCharge`, `DemandCharge`, etc.) backing the rate catalog |

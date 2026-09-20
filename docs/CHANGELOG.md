@@ -11,6 +11,8 @@ bumped for a release.
 
 ### Added
 
+- `RatePlan.source_url`: link to the published tariff document a plan was transcribed from (empty string when
+  not recorded).
 - Superseded tariff periods: `RATE_6_2025` and `RATE_8_2025` (in effect
   2025-07-23 to 2026-06-30) archive the prior Rate 6 / Rate 8 usage charges as
   `RatePlan` objects with `effective_to` set. They carry only the usage charge
@@ -33,6 +35,15 @@ bumped for a release.
   Home Assistant integration) to override the Bidgely multi-tenant pilot ID
   per-instance instead of relying solely on the hardcoded
   `const.BIDGELY_PILOT_ID`. Falls back to the library default when not given.
+
+### Changed
+
+- Each rate plan now sets its own `effective_from` (there is no longer a shared effective date), since
+  tariffs can change independently.
+- Rate plan definitions moved out of `rates.py` into one module per plan under
+  `dominionsc/rate_plans/`, with shared values in `rate_plans/_common.py`. `dominionsc.rates` remains the
+  public entry point that assembles the catalog, `RATE_PLAN_HISTORY`, and the lookup functions. No public API
+  or values changed.
 
 ### Fixed
 

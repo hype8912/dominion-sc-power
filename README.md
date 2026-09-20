@@ -19,7 +19,7 @@ This library is used by the custom [Home Assistant Integration for Dominion Ener
 ## Supported Rate Plans
 
 The library ships declarative pricing for the following Dominion Energy SC
-residential tariffs (see [`src/dominionsc/rates.py`](src/dominionsc/rates.py)):
+residential tariffs (see [`src/dominionsc/rates.py`](src/dominionsc/rates.py) and the per-plan modules in [`src/dominionsc/rate_plans/`](src/dominionsc/rate_plans/)):
 
 **Electric**
 

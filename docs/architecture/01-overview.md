@@ -9,7 +9,7 @@
 
 ## Scope & Boundaries
 
-- **In scope:** Async `aiohttp` client; login + TFA; usage/cost retrieval by register (`ESPI UsagePoint`); forecast model; CSV/CLI output; net-metered (multi-register) solar accounts; a declarative residential rate plan catalog with superseded tariff periods (`rates.py`).
+- **In scope:** Async `aiohttp` client; login + TFA; usage/cost retrieval by register (`ESPI UsagePoint`); forecast model; CSV/CLI output; net-metered (multi-register) solar accounts; a declarative residential rate plan catalog with superseded tariff periods (`rates.py` and `rate_plans/`).
 - **Explicit limits (from README):** One service address per account; TFA required; data delayed 24–48 hours.
 
 ## High-Level Component Diagram
@@ -32,7 +32,8 @@ flowchart TB
         Parsers["parsers/greenbutton.py + forecast.py"]
         Models["models/account, forecast, register_reads, usage_read, rate_plan"]
         Config["config.py / const.py"]
-        Rates["rates.py — rate plan catalog"]
+        Rates["rates.py — rate plan catalog, history, lookups"]
+        RatePlans["rate_plans/ — one module per plan"]
     end
 
     CLI --> Client
@@ -47,7 +48,8 @@ flowchart TB
     Auth --> Config
     URLs --> Config
     Parsers --> Models
-    Rates --> Models
+    Rates --> RatePlans
+    RatePlans --> Models
 
     Transport --> Dominion_API
     Transport --> Bidgely_API
@@ -64,7 +66,7 @@ flowchart TB
 - **Consumption scaling:** the Green Button parser applies the feed's declared `powerOfTenMultiplier` so gas values come out in cubic feet.
 - **Single source of truth for configuration:** `UtilityConfig` (`config.py`) carries endpoints, timezone, pilot ID, and User-Agent; `urls.py` and `headers.py` are the only places that build URLs and header dicts.
 - **CLI extracted** from `__main__.py` into `cli.py` (see `REFACTOR_PLAN.md` Phase 5, finding F9 fix).
-- **Rate plans as data:** `rates.py` declares the residential tariff catalog using a discriminated union of frozen charge dataclasses (`models/rate_plan.py`) rather than parsed/fetched data — no network call is involved. Superseded tariff periods (for example `RATE_8_2025`) are kept alongside the current plans so callers can price historical usage with `get_rate_plan_for_date()`.
+- **Rate plans as data:** each plan is defined in its own module under `rate_plans/`, and `rates.py` assembles them into the residential tariff catalog. Plans use a discriminated union of frozen charge dataclasses (`models/rate_plan.py`) rather than parsed/fetched data — no network call is involved. Superseded tariff periods (for example `RATE_8_2025`) are kept alongside the current plans so callers can price historical usage with `get_rate_plan_for_date()`. Each plan module carries its own `HISTORY`.
 
 ## Technology Stack
 

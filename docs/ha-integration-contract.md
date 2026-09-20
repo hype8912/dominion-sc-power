@@ -347,6 +347,7 @@ periods = get_rate_plan_history("rate_8")
 | `charges` | `tuple[Charge, ...]` | See below |
 | `eligibility_rules` | `tuple[EligibilityRule, ...]` | Informational eligibility text; safe to display to users |
 | `adjustments` | `tuple[Adjustment, ...]` | Informational billing adjustment descriptions |
+| `source_url` | `str` | Link to the published tariff document, if recorded (empty string otherwise); safe to show to users as a reference |
 
 ### Working with `charges`
 

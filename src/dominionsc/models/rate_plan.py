@@ -343,3 +343,4 @@ class RatePlan:
     eligibility_rules: tuple[EligibilityRule, ...] = ()
     adjustments: tuple[Adjustment, ...] = ()
     description: str = ""
+    source_url: str = ""

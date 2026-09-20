@@ -54,7 +54,8 @@ dominion-sc-power/
 │   ├── exceptions.py       # Exception hierarchy
 │   ├── helpers.py          # create_cookie_jar() utility
 │   ├── cli.py              # CLI argument parser and runner
-│   ├── rates.py            # Residential rate plan catalog
+│   ├── rates.py            # Public rate plan entry point: assembles the plans, mappings, history, and lookups
+│   ├── rate_plans/         # One module per rate plan (RATE_*, archived periods, HISTORY) plus _common.py
 │   │
 │   ├── models/             # Pure data classes (no network, no logic)
 │   │   ├── account.py      # AccountInfo
@@ -334,7 +335,9 @@ All pure data with no business logic.
 | `UsageUnit` | `KWH` / `THERM` enum |
 | `Season` | `SUMMER` / `WINTER` enum |
 
-### `rates.py` — Rate plan catalog
+### `rates.py` and `rate_plans/` — Rate plan catalog
+
+Each plan is defined in its own module under `rate_plans/` (`rate_1.py`, `rate_2.py`, …, `rate_32v.py`). A module holds the plan's current `RATE_*` constant, any archived earlier periods, and a `HISTORY` tuple of every known period (oldest first, ending with the current plan). Each plan sets its own `effective_from`, since a plan's tariff can change independently of the others. Values shared by several plans (the adjustment lists, the DER fixed charge, and the `seasonal_tiers()` helper) live in `rate_plans/_common.py`. `rates.py` is the public entry point: it imports the plans, builds the mappings and `RATE_PLAN_HISTORY`, and defines the lookup functions. Callers import from `dominionsc.rates` or `dominionsc`, never from `rate_plans`.
 
 Declarative, hard-coded definitions of all current Dominion Energy SC residential tariffs (effective July 1, 2026), plus archived earlier periods for some plans. No network calls, no parsing — purely data. The plan constants (`RATE_1`, `RATE_2`, etc.) are assembled from types defined in `models/rate_plan.py` and stored in four read-only `MappingProxyType` mappings:
 
@@ -465,13 +468,13 @@ If the Dominion portal starts rejecting requests, update `USER_AGENT` in `src/do
 
 ### Update rate plans
 
-Rate plans are defined in `src/dominionsc/rates.py` using types from `src/dominionsc/models/rate_plan.py`. Dominion Energy SC typically publishes updated tariffs on July 1 each year.
+Rate plans are defined one per module in `src/dominionsc/rate_plans/` using types from `src/dominionsc/models/rate_plan.py`; `src/dominionsc/rates.py` assembles them into the public catalog. Dominion Energy SC typically publishes updated tariffs on July 1 each year.
 
 **When rates change (price adjustments only):**
 
-1. Archive the outgoing values first so historical usage can still be priced. Copy each affected plan to a new constant (for example `RATE_8_2026`) with `effective_from` set to the old `_EFFECTIVE_FROM` and `effective_to` set to the day before the new one. Add it to the tuple used to build `RATE_PLAN_HISTORY` (each code's entries must stay oldest first), and export it from `__init__.py` and `__all__`. The existing `RATE_6_2025` and `RATE_8_2025` share `_PRIOR_EFFECTIVE_FROM` and `_PRIOR_EFFECTIVE_TO`, so give a newly archived period its own dates.
-2. Update `_EFFECTIVE_FROM = date(YYYY, 7, 1)` at the top of `rates.py`.
-3. Update the `Decimal` amounts in the affected `RATE_*` constants (e.g., `DailyCharge(amount=Decimal("0.36164"))`).
+1. Archive the outgoing values first so historical usage can still be priced. In each affected plan module (for example `rate_plans/rate_8.py`), copy the current plan to a new constant (for example `RATE_8_2026`) with the old `effective_from` and an `effective_to` set to the day before the new effective date, and insert it in that module's `HISTORY` ahead of the current plan (oldest first). Import it in `rates.py` and add it to `rates.py`'s `__all__` and to `dominionsc/__init__.py` and its `__all__`. Each archived period defines its own dates in its plan module, as `RATE_6_2025` and `RATE_8_2025` do.
+2. Update `effective_from` on the current `RATE_*` constant in each affected `rate_plans/rate_*.py` module (plans whose tariff did not change keep their existing date).
+3. Update the `Decimal` amounts in the same constants (e.g., `DailyCharge(amount=Decimal("0.36164"))`) and set `source_url` to the link for the new tariff document.
 4. Update `tests/test_rates.py` — find the assertions for the changed plan and update the expected values, and add tests for the archived period.
 5. Update the effective dates and any changed plan details in `docs/api-reference.md` and `docs/ha-integration-contract.md`, and add a `docs/CHANGELOG.md` entry.
 
@@ -480,24 +483,24 @@ Rate plans are defined in `src/dominionsc/rates.py` using types from `src/domini
 1. If the new structure doesn't map to any existing `Charge` subclass, add a new frozen dataclass in `models/rate_plan.py` following the existing pattern (add a `kind: Literal["..."]` discriminant field).
 2. Add the new type to the `Charge` type alias in `models/rate_plan.py`.
 3. Export the new type from `src/dominionsc/__init__.py` and add it to `__all__`.
-4. Use the new type in the relevant `RATE_*` constant in `rates.py`.
+4. Use the new type in the relevant `RATE_*` constant in its `rate_plans/rate_*.py` module.
 5. Add tests in `test_rates.py`.
 6. Document the new type in `docs/api-reference.md` under the Charge union table.
 
 **When a new plan is added:**
 
-1. Define a new `RATE_XX = RatePlan(...)` constant in `rates.py`.
-2. Add it to the appropriate mapping (`RESIDENTIAL_ELECTRIC_RATE_PLANS` or `RESIDENTIAL_GAS_RATE_PLANS`). `RATE_PLAN_HISTORY` picks it up automatically.
-3. Export the new constant from `__init__.py` and `__all__`.
+1. Create `rate_plans/rate_xx.py` defining `RATE_XX = RatePlan(...)` and `HISTORY = (RATE_XX,)`, following an existing plan module.
+2. In `rates.py`, import the constant and its module, add it to the appropriate mapping (`RESIDENTIAL_ELECTRIC_RATE_PLANS` or `RESIDENTIAL_GAS_RATE_PLANS`), add `rate_xx.HISTORY` to the tuple that builds `RATE_PLAN_HISTORY`, and add the constant to `__all__`.
+3. Export the new constant from `dominionsc/__init__.py` and its `__all__`.
 4. Add tests in `test_rates.py`.
 5. Document it in `docs/api-reference.md` under the rate plan catalog table, and in `docs/ha-integration-contract.md`.
 
 **When a plan is removed or superseded:**
 
-1. Set `effective_to` on the constant rather than deleting it — this preserves the historical record.
-2. Remove it from the relevant `RESIDENTIAL_*` mapping so it no longer appears as a current plan.
-3. `RATE_PLAN_HISTORY` is built from `RESIDENTIAL_RATE_PLANS`, so a plan removed from the current mappings drops out of the history unless you add it to `RATE_PLAN_HISTORY` explicitly. Adjust that mapping so the code still resolves through `get_rate_plan_history()` and `get_rate_plan_for_date()`.
-4. Keep the export in `__init__.py` and `__all__` while callers may still price historical usage with the constant.
+1. Set `effective_to` on the constant rather than deleting it or its module — this preserves the historical record.
+2. Remove it from the relevant `RESIDENTIAL_*` mapping in `rates.py` so it no longer appears as a current plan.
+3. Leave its `HISTORY` in the tuple that builds `RATE_PLAN_HISTORY`, so the code still resolves through `get_rate_plan_history()` and `get_rate_plan_for_date()`. Note that the last history entry of a discontinued plan then has `effective_to` set instead of being current.
+4. Keep the exports in `dominionsc/__init__.py` and `__all__` while callers may still price historical usage with the constant.
 5. Update `tests/test_rates.py` and `docs/api-reference.md`.
 
 Rate plans are purely declarative data — changing them does not affect the API communication logic.

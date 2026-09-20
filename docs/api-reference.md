@@ -484,6 +484,7 @@ from dominionsc import (
 | `eligibility_rules` | `tuple[EligibilityRule, ...]` | Eligibility requirements (informational). |
 | `adjustments` | `tuple[Adjustment, ...]` | Billing adjustments (informational). |
 | `description` | `str` | Optional free-text description. |
+| `source_url` | `str` | Link to the published tariff document this plan was transcribed from, for future reference. Empty string when not recorded. |
 
 #### `Charge` union type
 
