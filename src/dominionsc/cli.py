@@ -96,7 +96,18 @@ async def _handle_mfa(
 ) -> bool:
     """Interactively handle an MFA challenge.
 
-    Returns True if MFA succeeded and login was retried, False on failure.
+    Prompts the user to pick a delivery option (when the server offers any),
+    reads the code from stdin, submits it, optionally saves the resulting
+    login data, and retries the login.
+
+    Args:
+        dominionsc: The client whose login raised the challenge.
+        challenge: The raised challenge, carrying the TFA handler.
+        login_data_file: Path to write the new TFA token to, or ``None`` to skip.
+
+    Returns:
+        True if MFA succeeded and login was retried, False on failure.
+
     """
     handler: DominionSCTFAHandler = challenge.handler
     print(f"TFA Challenge: {challenge}")
@@ -137,6 +148,8 @@ async def run(args: argparse.Namespace) -> int:
     Returns an exit code (0 = success, non-zero = error).
     Separated from __main__ so it can be tested without subprocess.
     """
+    # No -v: INFO. -v: DEBUG (10). Each extra -v lowers the level by one more
+    # (-vv -> 9, ...), which only matters for loggers using sub-DEBUG levels.
     logging.basicConfig(level=logging.DEBUG - args.verbose + 1 if args.verbose > 0 else logging.INFO)
 
     if args.start_date is None:
@@ -153,6 +166,8 @@ async def run(args: argparse.Namespace) -> int:
             with open(args.login_data_file) as file:
                 login_data = json.load(file)
         except (FileNotFoundError, json.JSONDecodeError):
+            # A missing or corrupt file just means no cached token: log in with
+            # interactive TFA and overwrite the file afterwards.
             pass
 
     async with aiohttp.ClientSession(cookie_jar=create_cookie_jar()) as session:

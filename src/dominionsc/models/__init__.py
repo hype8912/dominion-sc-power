@@ -1,9 +1,12 @@
 """Data models for the dominionsc package.
 
 Exports:
-    AccountInfo  - named replacement for the positional [[types], addr] list
-    Forecast     - billing forecast data
-    UsageRead    - a single interval meter reading
+    AccountInfo    - named replacement for the positional [[types], addr] list
+    Forecast       - billing forecast data
+    UsageRead      - a single interval meter reading
+    RegisterReads  - interval readings grouped by meter register (UsagePoint)
+    RatePlan, the Charge variants, and supporting types - declarative tariff
+                     models (see rate_plan.py)
 """
 
 from .account import AccountInfo

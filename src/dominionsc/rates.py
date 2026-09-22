@@ -52,13 +52,20 @@ __all__: list[str] = [
     "get_rate_plan_history",
 ]
 
+# Catalogs of the *current* period of each plan, keyed by plan code. Wrapped in
+# MappingProxyType so callers cannot mutate the shared module-level catalog.
 RESIDENTIAL_ELECTRIC_RATE_PLANS: Mapping[str, RatePlan] = MappingProxyType(
     {plan.code: plan for plan in (RATE_1, RATE_2, RATE_5, RATE_6, RATE_7, RATE_8)}
 )
+"""Current residential electric plans, keyed by code (e.g. ``"rate_8"``)."""
+
 RESIDENTIAL_GAS_RATE_PLANS: Mapping[str, RatePlan] = MappingProxyType({plan.code: plan for plan in (RATE_32S, RATE_32V)})
+"""Current residential gas plans, keyed by code (e.g. ``"rate_32s"``)."""
+
 RESIDENTIAL_RATE_PLANS: Mapping[str, RatePlan] = MappingProxyType(
     {**RESIDENTIAL_ELECTRIC_RATE_PLANS, **RESIDENTIAL_GAS_RATE_PLANS}
 )
+"""All current residential plans (electric and gas), keyed by code."""
 
 # Every known tariff period per plan code, ascending by ``effective_from`` (the last entry is the current plan).
 # Each plan module supplies its own ``HISTORY``; plans with no superseded periods have a single entry.
@@ -104,6 +111,7 @@ def get_rate_plan_for_date(code: str, on: date) -> RatePlan | None:
     Returns ``None`` when the code is unknown or *on* falls before the earliest
     recorded tariff period (or in a gap between periods).
     """
+    # Both ends are inclusive; an open-ended (current) period has effective_to=None.
     for plan in get_rate_plan_history(code):
         if plan.effective_from <= on and (plan.effective_to is None or on <= plan.effective_to):
             return plan

@@ -148,14 +148,26 @@ def _parse_intervals(entry: dict[str, Any], tz: zoneinfo.ZoneInfo, scale: float)
     ``espi:value`` into the unit named by the feed's ``ReadingType`` --
     e.g. Dominion's gas feed requires ``scale=0.001`` to convert raw
     thousandths-of-a-cubic-foot into cubic feet.
+
+    Args:
+        entry: One "Interval Consumption" ``<entry>`` dict from xmltodict.
+        tz: Timezone attached to each reading's timestamps.
+        scale: Multiplier applied to every raw ``espi:value``.
+
+    Returns:
+        One ``UsageRead`` per ``espi:IntervalReading``, in document order.
+
     """
     reads: list[UsageRead] = []
     intervals: list[Any] = _ensure_list(entry["content"]["espi:IntervalBlock"]["espi:IntervalReading"])
     for interval in intervals:
         time_start: int = int(interval["espi:timePeriod"]["espi:start"])
         duration: int = int(interval["espi:timePeriod"]["espi:duration"])
+        # End is inclusive: one second before the next interval starts.
         time_end: int = time_start + duration - 1
         consumption: float = int(interval["espi:value"]) * scale
+        # replace(tzinfo=...) relabels the UTC clock time with the local zone; it does
+        # not convert it (astimezone would). The stored clock time is the UTC one.
         reads.append(
             UsageRead(
                 start_time=datetime.fromtimestamp(time_start, UTC).replace(tzinfo=tz),
@@ -181,7 +193,8 @@ def parse_registers(xml_text: str, timezone: str, url: str | None = None) -> lis
     Args:
         xml_text: Raw XML string from Bidgely's gb-download endpoint.
         timezone: IANA timezone name (e.g. "America/New_York"). Interval
-            timestamps are UTC epoch seconds, converted to this zone.
+            timestamps are epoch seconds; each reading is tagged with this
+            zone without shifting its clock time (see ``_parse_intervals``).
         url: Optional request URL, included in ApiException if parsing fails.
 
     Returns:

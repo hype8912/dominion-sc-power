@@ -23,8 +23,28 @@ _LOGGER = logging.getLogger(__file__)
 
 
 def find_verification_token(webpage: str, path: str, funct: str) -> str:
-    """Find and extract the verification token from a webpage."""
+    """Find and extract the ASP.NET anti-forgery token from a webpage.
+
+    Dominion's portal embeds a ``__RequestVerificationToken`` hidden input in
+    each HTML page; its value must be echoed back as a header on subsequent
+    AJAX calls (see ``headers.dominion_ajax_headers``).
+
+    Args:
+        webpage: Raw HTML of the page to search.
+        path: Portal path the page was fetched from, used only in the error message.
+        funct: Name of the calling function, used only in the error message.
+
+    Returns:
+        The token value of the first matching hidden input.
+
+    Raises:
+        CannotConnect: If no token is present or it cannot be extracted.
+
+    """
     try:
+        # The capture group is greedy, so when several inputs share one line it can
+        # swallow everything up to the last `" />`; the split below trims it back
+        # to the first input's value.
         token_search: list[str] = re.findall(
             r'<input name="__RequestVerificationToken" type="hidden" value="(.*)" \/>', webpage
         )
@@ -39,7 +59,20 @@ def find_verification_token(webpage: str, path: str, funct: str) -> str:
 
 
 class DominionSCTFAHandler:
-    """TFA Handler for utility."""
+    """Drive the interactive two-factor authentication (TFA) step of login.
+
+    An instance is created by ``LoginFlow.execute`` and delivered to the caller
+    via ``MfaChallenge.handler`` when no valid TFA token is cached. The caller
+    then runs the three steps in order:
+
+    1. ``async_get_tfa_options`` -- list delivery targets (phone / email).
+    2. ``async_select_tfa_option`` -- have Dominion send a code to one of them.
+    3. ``async_submit_tfa_code`` -- submit the code and receive ``login_data``.
+
+    The handler reuses the session, headers, and URL handler from the
+    interrupted login so the server-side login state (cookies and
+    verification token) carries through.
+    """
 
     def __init__(
         self,
@@ -48,7 +81,17 @@ class DominionSCTFAHandler:
         headers: dict[str, str],
         url_handler: DominionSCURLHandler,
     ):
-        """Initialize the TFA handler."""
+        """Initialize the TFA handler.
+
+        Args:
+            session: The aiohttp session used for the interrupted login; it holds
+                the cookies that tie these calls to that login attempt.
+            dominion_endpoint: Base URL of the Dominion customer portal.
+            headers: AJAX headers (including the verification token) from the
+                login's authenticate step.
+            url_handler: Transport used for all TFA requests.
+
+        """
         self._session: aiohttp.ClientSession = session
         self._dominion_endpoint: str = dominion_endpoint
         self._headers: dict[str, str] = headers
@@ -63,11 +106,18 @@ class DominionSCTFAHandler:
     async def async_get_tfa_options(self) -> dict[str, str]:
         """Return a dictionary of TFA options available to the user.
 
-        The key is a stable identifier for the option, and the value is a
-        user-friendly description (e.g., {"sms_1": "Text message to ******1234"}).
+        Keys are the values to pass to ``async_select_tfa_option``; values are
+        for display. Dominion only returns masked contact strings, so both are
+        currently the same masked phone number or email address (e.g.
+        ``{"***-***-1234": "***-***-1234"}``). At most one phone and one email
+        are offered.
 
         The returned dictionary can be empty if no TFA options are available, i.e. the utility
         immediately asks for the code after login.
+
+        Raises:
+            ApiException: If the InitAuthentication response cannot be decoded.
+
         """
         tfa_options: dict[str, str] = {}
         url1: str = _urls.init_authentication_url(self._config)
@@ -79,6 +129,8 @@ class DominionSCTFAHandler:
         tfa_phone: list[str] = _tfa_options["phoneNumbers"]
         tfa_email: list[str] = _tfa_options["emailAddresses"]
 
+        # Only the first entry of each list is offered. The masked string itself is
+        # what SendPINCode expects as its "sendMethod", so it doubles as the key.
         if tfa_phone:
             tfa_options[tfa_phone[0]] = tfa_phone[0]
 
@@ -89,9 +141,15 @@ class DominionSCTFAHandler:
         return tfa_options
 
     async def async_select_tfa_option(self, option_id: str) -> None:
-        """Select an TFA option and trigger the code delivery.
+        """Select a TFA option and trigger the code delivery.
 
-        :raises CannotConnect: if the selection fails for reasons other than bad credentials.
+        Args:
+            option_id: A key from the dict returned by ``async_get_tfa_options``.
+
+        Raises:
+            ApiException: If the server does not confirm that the code was sent.
+            CannotConnect: If the request fails at the network level.
+
         """
         _LOGGER.debug("Selecting TFA option %s", option_id)
         url1: str = _urls.send_pin_code_url(self._config)
@@ -108,11 +166,23 @@ class DominionSCTFAHandler:
         On success, return login data that can be passed to async_login in order to skip TFA.
         On failure, raise InvalidAuth.
 
-        :raises InvalidAuth: if the code is incorrect.
+        Args:
+            code: The security code the user received.
+
+        Returns:
+            ``{"tfa_token": <token>}``. Assign it to ``DominionSC.login_data`` (and
+            persist it if desired) so future logins can skip interactive TFA.
+
+        Raises:
+            InvalidAuth: If the code is incorrect.
+            ApiException: If the VerifyPIN response cannot be decoded.
+
         """
         _LOGGER.debug("Submitting TFA code")
 
         url1: str = _urls.verify_pin_url(self._config)
+        # registerDevice=True asks Dominion to issue a reusable token, which is what
+        # lets later logins skip TFA via Verify2FAToken.
         data1: dict[str, str | bool] = {"PINcode": code, "registerDevice": True, "_df": ""}
         r1: str = await self._url_handler.call_api("post", url1, self._headers, data1)
         try:
@@ -142,12 +212,38 @@ class LoginFlow:
     ) -> tuple[str, str, list[list[str] | str]]:
         """Login to the utility website.
 
-        Return the access token or None
+        Runs the full sequence against two services:
 
-        :raises InvalidAuth: if login information is incorrect
-        :raises MfaChallenge: if interactive MFA is required
-        :raises CannotConnect: if there is a retryable connection exception
-        :raises ApiException: if API response cannot be parsed (API structure may have changed)
+        1. Dominion portal: fetch the login page for a verification token,
+           then POST the username and password.
+        2. TFA: verify the cached ``tfa_token``; if it is missing or rejected,
+           raise ``MfaChallenge`` so the caller can complete TFA interactively.
+        3. Dominion portal: reload the home page for a fresh verification token,
+           confirm the login has a single account, read the service address,
+           and fetch an encrypted Bidgely SDK payload.
+        4. Bidgely: exchange that payload for a bearer token, user id, and the
+           account's measurement types (ELECTRIC / GAS).
+
+        Args:
+            session: aiohttp session; its cookie jar should come from
+                ``create_cookie_jar()``.
+            username: Dominion Energy SC username/email.
+            password: Dominion Energy SC password.
+            login_data: Cached ``{"tfa_token": ...}`` from a prior
+                ``DominionSCTFAHandler.async_submit_tfa_code``, if any.
+
+        Returns:
+            ``(access_token, user_id, accounts)`` where ``access_token`` is the
+            Bidgely bearer token, ``user_id`` is the Bidgely user id, and
+            ``accounts`` is the legacy ``[measurement_types, service_address]``
+            list (see ``AccountInfo.to_legacy_list``).
+
+        Raises:
+            InvalidAuth: If login information is incorrect.
+            MfaChallenge: If interactive MFA is required.
+            CannotConnect: If there is a retryable connection exception.
+            ApiException: If API response cannot be parsed (API structure may have changed).
+
         """
         if login_data is None:
             login_data: dict[str, str] = {}  # {tfa_token: tfa_token}
@@ -174,6 +270,8 @@ class LoginFlow:
             r1_status: str = json.loads(r1)["data"]["status"]
         except Exception as err:
             raise ApiException("Unable to decode Authenticate data status.", url=url1, response_text=r1) from err
+        # Only the TFA path is implemented, so "twoFA" is the only status that lets
+        # login continue; any other status is treated as an authentication failure.
         if r1_status == "failed":
             raise InvalidAuth(f"Invalid credentials, please try again. {r1}")
         if r1_status != "twoFA":
@@ -188,6 +286,8 @@ class LoginFlow:
             url2: str = _urls.verify_2fa_token_url(config, tfa_token)
             r2: str = await url_handler.call_api("get", url2, ajax_headers)
             # Was token accepted?
+            # A falsy "data" means the token expired or was revoked; clear it so
+            # the check below falls through to an interactive MfaChallenge.
             if not json.loads(r2)["data"]:
                 tfa_token = ""
 
@@ -236,7 +336,9 @@ class LoginFlow:
         except Exception as err:
             raise ApiException("Unable to decode GetBidgelySDKInit encToken", url=url6, response_text=r6) from err
 
-        # Finally get bearer
+        # Finally, exchange Dominion's encrypted SDK payload for a Bidgely bearer token.
+        # The same wc-session response also carries the user id and the account's
+        # measurement types.
         url7: str = _urls.wc_session_url(config)
         bidgely_login_headers: dict[str, str] = _headers.bidgely_headers(config)
         body2: dict[str, str] = {"clientId": "prod_desc_widget", "encryptedData": encrypted_token}

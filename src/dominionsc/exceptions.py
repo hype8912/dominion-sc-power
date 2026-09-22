@@ -16,7 +16,15 @@ class CannotConnect(Exception):
         status: int | None = None,
         response_text: str | None = None,
     ) -> None:
-        """Initialize the exception."""
+        """Initialize the exception.
+
+        Args:
+            message: Human-readable description of the failure.
+            url: Request URL that failed, if known.
+            status: HTTP status code, if one was received.
+            response_text: Response body, if one was received.
+
+        """
         super().__init__(message)
         self.url: str | None = url
         self.status: int | None = status
@@ -39,10 +47,19 @@ class InvalidAuth(Exception):
 
 
 class MfaChallenge(Exception):
-    """Raised when MFA is required and user interaction is needed."""
+    """Raised when MFA is required and user interaction is needed.
+
+    Catch it and use ``handler`` to finish TFA, then retry ``async_login``.
+    """
 
     def __init__(self, message: str, handler: "DominionSCTFAHandler") -> None:
-        """Initialize the exception."""
+        """Initialize the exception.
+
+        Args:
+            message: Human-readable reason MFA is needed.
+            handler: TFA handler bound to the interrupted login session.
+
+        """
         super().__init__(message)
         self.handler: DominionSCTFAHandler = handler
 
@@ -57,7 +74,15 @@ class ApiException(Exception):
         status: int | None = None,
         response_text: str | None = None,
     ) -> None:
-        """Initialize the exception."""
+        """Initialize the exception.
+
+        Args:
+            message: Human-readable description of what could not be parsed.
+            url: Request URL whose response was unexpected, if known.
+            status: HTTP status code, if known.
+            response_text: The unexpected response body, for debugging.
+
+        """
         super().__init__(message)
         self.url = url
         self.status = status

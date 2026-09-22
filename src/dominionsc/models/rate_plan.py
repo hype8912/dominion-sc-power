@@ -223,7 +223,7 @@ class DemandCharge:
             for an interval to qualify toward the demand measurement
             (e.g., ``"on_peak"``).
         rolling_interval: If ``True``, the demand is the maximum average
-            power over any overlapping 15-minute window; if ``False``, it is
+            power over any overlapping ``interval_minutes`` window; if ``False``, it is
             the maximum of non-overlapping fixed windows.
 
     """
@@ -285,7 +285,7 @@ class Adjustment:
         name: Human-readable adjustment name.
         description: Plain-language explanation of how the adjustment works.
         included_in_published_charge: ``True`` if this adjustment is already
-            embedded in the published charge rates in ``rates.py`` (so it
+            embedded in the published charge rates in ``rate_plans/`` (so it
             does not need to be added separately); ``False`` if it appears
             as a distinct line item on the bill.
 
@@ -301,9 +301,14 @@ class Adjustment:
 class RatePlan:
     """A versioned, declarative Dominion Energy South Carolina residential tariff.
 
-    All rate plans are defined in ``rates.py`` and exported from the
-    ``dominionsc`` package. Use ``get_rate_plan(code)`` to look up by code
-    or ``get_available_rate_plans()`` to iterate all plans.
+    Each plan is defined in its own ``rate_plans/rate_*.py`` module, collected
+    by ``rates.py``, and exported from the ``dominionsc`` package. Use
+    ``get_rate_plan(code)`` to look up the current plan by code,
+    ``get_rate_plan_for_date(code, on)`` for the plan in effect on a past
+    date, or ``get_available_rate_plans()`` to iterate all current plans.
+
+    A code can have several ``RatePlan`` objects, one per tariff period; they
+    share ``code`` and differ in ``effective_from`` / ``effective_to`` and prices.
 
     Attributes:
         code: Short lowercase identifier matching the key in
@@ -312,7 +317,7 @@ class RatePlan:
         commodity: The utility commodity billed (``Commodity.ELECTRICITY``
             or ``Commodity.GAS``).
         effective_from: First date this rate schedule is in effect.
-        effective_to: Last date in effect, or ``None`` if still current.
+        effective_to: Last date in effect (inclusive), or ``None`` if still current.
         charges: Ordered tuple of charge objects that together define the
             bill calculation. See the ``Charge`` union type for all variants.
         eligibility_rules: Zero or more eligibility requirements a customer
@@ -320,6 +325,9 @@ class RatePlan:
         adjustments: Zero or more billing adjustments described in the tariff.
             Informational only.
         description: Optional free-text description of the plan.
+        source_url: Link to the published tariff PDF the prices were taken
+            from. Superseded periods point at a Web Archive snapshot or a PSC
+            e-tariff filing, since the live PDF is replaced when rates change.
 
     Example::
 

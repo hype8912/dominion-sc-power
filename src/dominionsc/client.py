@@ -127,7 +127,16 @@ class DominionSC:
         return await LoginFlow(self._config).execute(session, username, password, login_data)
 
     async def async_get_accounts(self) -> list[list[str] | str]:
-        """Get a list of accounts for the signed in user."""
+        """Get the account details captured during login.
+
+        Returns:
+            The legacy two-element list ``[measurement_types, service_address]``,
+            e.g. ``[["ELECTRIC", "GAS"], "123 MAIN ST (*-****-****0-4464)"]``.
+            Each measurement type is a valid ``account`` argument for
+            ``async_get_usage_reads`` / ``async_get_register_reads``. The list is
+            empty until ``async_login`` succeeds.
+
+        """
         return self.accounts
 
     def get_timezone(self) -> str:
@@ -197,10 +206,25 @@ class DominionSC:
         start_date: datetime | None = None,
         end_date: datetime | None = None,
     ) -> list[UsageRead]:
-        """Get the usage reads from bidgely endpoint.
+        """Get the usage reads from bidgely endpoint as one flat list.
 
-        :raises CannotConnect: if there is a retryable connection exception
-        :raises ApiException: if API response cannot be parsed (API structure may have changed)
+        Args:
+            account: Measurement type to fetch, ``"ELECTRIC"`` or ``"GAS"`` (see
+                ``async_get_accounts``).
+            start_date: Start of the window; the time of day is ignored and the
+                date is floored to local midnight.
+            end_date: End of the window; floored to local midnight the same way.
+
+        Returns:
+            Every interval reading across all registers. For net-metered accounts
+            prefer ``async_get_register_reads``, which keeps registers separate.
+
+        Raises:
+            ValueError: If ``start_date`` or ``end_date`` is missing.
+            InvalidAuth: If called before a successful ``async_login``.
+            CannotConnect: If there is a retryable connection exception.
+            ApiException: If API response cannot be parsed (API structure may have changed).
+
         """
         if start_date is None or end_date is None:
             raise ValueError("start_date and end_date are required.")
@@ -236,14 +260,27 @@ class DominionSC:
         The library does not label registers as grid vs solar -- that
         decision belongs to the consumer.
 
-        :raises CannotConnect: if there is a retryable connection exception
-        :raises ApiException: if API response cannot be parsed (API structure may have changed)
+        Args:
+            account: Measurement type to fetch, ``"ELECTRIC"`` or ``"GAS"``.
+            start_date: Start of the window, floored to local midnight.
+            end_date: End of the window, floored to local midnight.
+
+        Returns:
+            One ``RegisterReads`` per UsagePoint, in the order first seen.
+
+        Raises:
+            ValueError: If ``start_date`` or ``end_date`` is missing.
+            InvalidAuth: If called before a successful ``async_login``.
+            CannotConnect: If there is a retryable connection exception.
+            ApiException: If API response cannot be parsed (API structure may have changed).
+
         """
         if start_date is None or end_date is None:
             raise ValueError("start_date and end_date are required.")
         if self.user_id is None:
             raise InvalidAuth("User not logged in to retrieve async_get_register_reads.")
 
+        # Same local-midnight flooring as async_get_usage_reads.
         start_date = datetime.combine(start_date, datetime.min.time())
         end_date = datetime.combine(end_date, datetime.min.time())
         start_time_timestamp: int = int(start_date.replace(tzinfo=zoneinfo.ZoneInfo(self.timezone)).timestamp())
@@ -253,6 +290,7 @@ class DominionSC:
         return parse_registers(r, self.timezone, url=url)
 
     def _get_headers(self) -> dict[str, str]:
+        """Return Bidgely headers carrying the bearer token from the last login."""
         return _headers.bidgely_headers(self._config, access_token=self.access_token)
 
     async def _async_get_request(self, url: str, headers: dict[str, str]) -> str:

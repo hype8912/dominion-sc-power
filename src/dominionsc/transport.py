@@ -39,7 +39,14 @@ class DominionSCURLHandler:
     """Centralizes and handles all web communication."""
 
     def __init__(self, session: aiohttp.ClientSession, timeout: aiohttp.ClientTimeout | float | None = None) -> None:
-        """Initialize the handler."""
+        """Initialize the handler.
+
+        Args:
+            session: Shared aiohttp session; never mutated.
+            timeout: A ready-made ``aiohttp.ClientTimeout``, a total timeout in
+                seconds, or ``None`` for the 30-second default.
+
+        """
         self._session: aiohttp.ClientSession = session
         self._timeout: aiohttp.ClientTimeout
         if isinstance(timeout, aiohttp.ClientTimeout):
@@ -50,7 +57,23 @@ class DominionSCURLHandler:
     async def call_api(
         self, method: str, url: str, headers: dict[str, str], json_data: Mapping[str, str | bool] | None = None
     ) -> str:
-        """Return the result of an api call."""
+        """Send a request and return the response body as text.
+
+        Args:
+            method: ``"get"`` or ``"post"`` (lowercase only).
+            url: Fully built request URL (see ``urls.py``).
+            headers: Request headers (see ``headers.py``).
+            json_data: Optional body, sent JSON-encoded.
+
+        Returns:
+            The response body decoded as UTF-8. The HTTP status is not checked;
+            callers detect failures by parsing the body.
+
+        Raises:
+            ValueError: If ``method`` is not ``"get"`` or ``"post"``.
+            CannotConnect: On any aiohttp client or network error.
+
+        """
         api_func: Callable[..., Any]
         if method == "post":
             api_func = self._session.post

@@ -81,7 +81,16 @@ def gb_download_url(
     end_timestamp: int,
     measurement_type: str,
 ) -> str:
-    """Green Button interval-data export for a given account/measurement type."""
+    """Green Button interval-data export for a given account/measurement type.
+
+    Args:
+        config: Utility configuration supplying the Bidgely endpoint.
+        user_id: Bidgely user id returned by the wc-session login step.
+        start_timestamp: Window start, Unix epoch seconds.
+        end_timestamp: Window end, Unix epoch seconds.
+        measurement_type: ``"ELECTRIC"`` or ``"GAS"``.
+
+    """
     return (
         config.bidgely_endpoint + f"/v2.0/dashboard/users/{user_id}/gb-download"
         f"?start={start_timestamp}&end={end_timestamp}"
