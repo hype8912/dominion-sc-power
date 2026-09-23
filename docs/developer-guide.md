@@ -216,7 +216,7 @@ The Green Button ESPI XML has this general shape:
       <espi:IntervalBlock>
         <espi:IntervalReading>
           <espi:timePeriod>
-            <espi:start>1748736000</espi:start>     <!-- UTC epoch seconds -->
+            <espi:start>1748736000</espi:start>     <!-- local wall-clock time, encoded as epoch seconds -->
             <espi:duration>900</espi:duration>       <!-- 15 minutes = 900 seconds -->
           </espi:timePeriod>
           <espi:value>350</espi:value>               <!-- Wh -->
@@ -235,7 +235,7 @@ The parser:
 3. Filters entries to those whose title starts with `"Interval Consumption"`.
 4. Extracts the UsagePoint ID from the `<link href>` path using a regex.
 5. Groups all entries by UsagePoint ID into `RegisterReads` objects.
-6. Converts UTC epoch seconds to timezone-aware `datetime` objects and multiplies each raw value by the scale factor.
+6. Decodes each `espi:start` as a UTC datetime and then attaches the utility's timezone without converting, because Bidgely encodes local wall-clock time in that field (a reading at 00:00 Eastern is sent as the epoch for 00:00 UTC). It then multiplies each raw value by the scale factor.
 
 The `_ensure_list()` helper normalizes `xmltodict`'s behavior: it returns a `dict` when there is only one child element, but a `list` when there are multiple. Calling `_ensure_list()` makes callers work correctly in both cases.
 

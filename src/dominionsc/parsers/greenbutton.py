@@ -166,8 +166,10 @@ def _parse_intervals(entry: dict[str, Any], tz: zoneinfo.ZoneInfo, scale: float)
         # End is inclusive: one second before the next interval starts.
         time_end: int = time_start + duration - 1
         consumption: float = int(interval["espi:value"]) * scale
-        # replace(tzinfo=...) relabels the UTC clock time with the local zone; it does
-        # not convert it (astimezone would). The stored clock time is the UTC one.
+        # Bidgely's espi:start is not a true UTC epoch: it encodes the local wall-clock
+        # time as if it were UTC (verified against the portal's CSV export, including
+        # across a DST change). So read it as UTC and swap in the local zone with
+        # replace() -- astimezone() would shift every reading by the UTC offset.
         reads.append(
             UsageRead(
                 start_time=datetime.fromtimestamp(time_start, UTC).replace(tzinfo=tz),
@@ -193,8 +195,9 @@ def parse_registers(xml_text: str, timezone: str, url: str | None = None) -> lis
     Args:
         xml_text: Raw XML string from Bidgely's gb-download endpoint.
         timezone: IANA timezone name (e.g. "America/New_York"). Interval
-            timestamps are epoch seconds; each reading is tagged with this
-            zone without shifting its clock time (see ``_parse_intervals``).
+            timestamps encode local wall-clock time as epoch seconds; each
+            reading gets this zone attached without shifting its clock time
+            (see ``_parse_intervals``).
         url: Optional request URL, included in ApiException if parsing fails.
 
     Returns:
