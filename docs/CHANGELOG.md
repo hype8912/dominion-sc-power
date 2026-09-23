@@ -16,12 +16,12 @@ bumped for a release.
 - Superseded tariff periods, archived as `RatePlan` objects with `effective_to` set and their `source_url`:
   `RATE_1_2025`, `RATE_2_2025`, `RATE_6_2025`, `RATE_7_2025`, and `RATE_8_2025` (in effect 2025-07-23 to
   2026-06-30), plus `RATE_5_2024` (2024-09-01 to 2025-04-30), `RATE_5_2025` (2025-05-01 to 2026-06-30), and the gas
-  plan `RATE_32V_2025` (2025-09-01 to 2026-06-30). Each is
+  plans `RATE_32V_2025` and `RATE_32S_2025` (both 2025-09-01 to 2026-06-30). Each is
   a complete plan: the Basic Facilities Charge, the DER charge, the usage / time-of-use / demand charges, and the
   adjustments. Rate 5's May 2025 tariff and July 23, 2025 revision publish the same prices, so they are a single
   period; the May tariff gives no calendar date ("first billing cycle of May 2025"), so its start is approximated
   as the first of the month; Rate 32V's September 2025 tariff ("1st billing cycle of September 2025") is treated
-  the same way.
+  the same way, as is Rate 32S's September 2025 tariff.
 - `time_of_use_charge()` in `rate_plans/_common.py` builds the on-peak / off-peak / super-off-peak energy charge
   shared by Rates 5 and 7.
 - `get_rate_plan_history(code)` returns every known period for a rate code,

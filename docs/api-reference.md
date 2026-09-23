@@ -622,6 +622,7 @@ from dominionsc import (
     RATE_6_2025,
     RATE_7_2025,
     RATE_8_2025,
+    RATE_32S_2025,
     RATE_32V_2025,
     RATE_PLAN_HISTORY,
 )
@@ -636,9 +637,10 @@ from dominionsc import (
 | `RATE_6_2025` | `"rate_6"` | 2025-07-23 to 2026-06-30 |
 | `RATE_7_2025` | `"rate_7"` | 2025-07-23 to 2026-06-30 |
 | `RATE_8_2025` | `"rate_8"` | 2025-07-23 to 2026-06-30 |
+| `RATE_32S_2025` | `"rate_32s"` | 2025-09-01 to 2026-06-30 |
 | `RATE_32V_2025` | `"rate_32v"` | 2025-09-01 to 2026-06-30 |
 
-These carry `effective_to` and a `source_url`. Each is a complete plan: the Basic Facilities Charge, the Distributed Energy Resource Program charge (electric plans), the usage / time-of-use / demand charges, and the adjustments. Rate 5's May 2025 tariff and July 23, 2025 revision publish the same prices, so they are the single period `RATE_5_2025`; the May tariff gives no calendar date ("first billing cycle of May 2025"), so it starts on 2025-05-01. Rate 32V's tariff is likewise effective from the "1st billing cycle of September 2025", so `RATE_32V_2025` starts on 2025-09-01. They are **not** included in `RESIDENTIAL_*_RATE_PLANS`, `get_rate_plan()`, or `get_available_rate_plans()`; reach them through `RATE_PLAN_HISTORY` or the lookup functions below.
+These carry `effective_to` and a `source_url`. Each is a complete plan: the Basic Facilities Charge, the Distributed Energy Resource Program charge (electric plans), the usage / time-of-use / demand charges, and the adjustments. Rate 5's May 2025 tariff and July 23, 2025 revision publish the same prices, so they are the single period `RATE_5_2025`; the May tariff gives no calendar date ("first billing cycle of May 2025"), so it starts on 2025-05-01. Rate 32V's tariff is likewise effective from the "1st billing cycle of September 2025", so `RATE_32V_2025` starts on 2025-09-01, as does `RATE_32S_2025`. Dates before a schedule's earliest recorded period return `None`. They are **not** included in `RESIDENTIAL_*_RATE_PLANS`, `get_rate_plan()`, or `get_available_rate_plans()`; reach them through `RATE_PLAN_HISTORY` or the lookup functions below.
 
 ---
 

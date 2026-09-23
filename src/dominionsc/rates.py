@@ -16,7 +16,7 @@ from .rate_plans.rate_5 import RATE_5, RATE_5_2024, RATE_5_2025
 from .rate_plans.rate_6 import RATE_6, RATE_6_2025
 from .rate_plans.rate_7 import RATE_7, RATE_7_2025
 from .rate_plans.rate_8 import RATE_8, RATE_8_2025
-from .rate_plans.rate_32s import RATE_32S
+from .rate_plans.rate_32s import RATE_32S, RATE_32S_2025
 from .rate_plans.rate_32v import RATE_32V, RATE_32V_2025
 
 if TYPE_CHECKING:
@@ -40,6 +40,7 @@ __all__: list[str] = [
     "RATE_8",
     "RATE_8_2025",
     "RATE_32S",
+    "RATE_32S_2025",
     "RATE_32V",
     "RATE_32V_2025",
     "RATE_PLAN_HISTORY",

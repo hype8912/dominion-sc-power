@@ -1,7 +1,8 @@
 """Tests for the declarative residential rate-plan catalog."""
 
-from datetime import date, time
+from datetime import date, time, timedelta
 from decimal import Decimal
+from itertools import pairwise
 
 from dominionsc import (
     RATE_1,
@@ -17,6 +18,8 @@ from dominionsc import (
     RATE_7_2025,
     RATE_8,
     RATE_8_2025,
+    RATE_32S,
+    RATE_32S_2025,
     RATE_32V,
     RATE_32V_2025,
     Commodity,
@@ -363,6 +366,26 @@ def test_rate_1_and_2_2025_values_and_dates():
     assert flat.price_per_unit == Decimal("0.12445")
 
 
+def test_rate_32s_2025_values_and_dates():
+    """Rate 32S's September 2025 tariff is archived with its own dates, price, and fixed charge."""
+    assert (RATE_32S_2025.effective_from, RATE_32S_2025.effective_to) == (date(2025, 9, 1), date(2026, 6, 30))
+    assert RATE_32S_2025.commodity == Commodity.GAS
+    assert RATE_32S_2025.code == "rate_32s"
+    assert RATE_32S_2025.source_url
+    monthly = next(c for c in RATE_32S_2025.charges if isinstance(c, MonthlyCharge))
+    assert monthly.amount == Decimal("10.90")
+    energy = next(c for c in RATE_32S_2025.charges if isinstance(c, FlatUsageCharge))
+    assert (energy.usage_unit, energy.price_per_unit) == (UsageUnit.THERM, Decimal("1.81026"))
+
+
+def test_rate_32s_periods_are_contiguous():
+    """Each 32S period starts the day after the previous one ends, so no date falls in a gap."""
+    history = get_rate_plan_history("rate_32s")
+    for earlier, later in pairwise(history):
+        assert earlier.effective_to is not None
+        assert later.effective_from == earlier.effective_to + timedelta(days=1)
+
+
 def test_rate_32v_2025_values_and_dates():
     """Rate 32V's September 2025 tariff is archived with its own dates, prices, and fixed charge."""
     assert (RATE_32V_2025.effective_from, RATE_32V_2025.effective_to) == (date(2025, 9, 1), date(2026, 6, 30))
@@ -397,7 +420,7 @@ def test_archived_plans_are_not_in_the_current_catalog():
     assert get_rate_plan("rate_6") is RATE_6
     assert RATE_6_2025 not in get_available_rate_plans()
     assert RATE_8_2025 not in get_available_rate_plans()
-    for plan in (RATE_1_2025, RATE_2_2025, RATE_5_2024, RATE_5_2025, RATE_7_2025, RATE_32V_2025):
+    for plan in (RATE_1_2025, RATE_2_2025, RATE_5_2024, RATE_5_2025, RATE_7_2025, RATE_32S_2025, RATE_32V_2025):
         assert plan not in get_available_rate_plans()
 
 
@@ -410,7 +433,7 @@ def test_rate_plan_history_is_ascending_and_ends_with_current_plan():
     assert get_rate_plan_history("rate_2") == (RATE_2_2025, RATE_2)
     assert get_rate_plan_history("rate_7") == (RATE_7_2025, RATE_7)
     assert get_rate_plan_history("rate_32v") == (RATE_32V_2025, RATE_32V)
-    assert get_rate_plan_history("rate_32s") == (get_rate_plan("rate_32s"),)
+    assert get_rate_plan_history("rate_32s") == (RATE_32S_2025, RATE_32S)
     assert get_rate_plan_history("not_a_rate") == ()
 
 
