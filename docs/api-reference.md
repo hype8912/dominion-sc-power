@@ -562,7 +562,9 @@ Season.SUMMER  # value: "summer"
 Season.WINTER  # value: "winter"
 ```
 
-Dominion Energy SC's published tariffs define summer as **June through September** and winter as **October through May**. The library does not determine which season applies to a given date — that decision belongs to the consumer. When calculating costs from interval reads, check the billing month against these ranges to select the correct `tiers_by_season` or `periods_by_season` entry.
+Dominion Energy SC's published tariffs define summer as **billing months May through September** and winter as **billing months October through April** — the wording printed on each seasonal rate schedule (Rates 5, 6, 7 and 8). The library does not determine which season applies to a given date — that decision belongs to the consumer. When calculating costs from interval reads, check the billing month against these ranges to select the correct `tiers_by_season` or `periods_by_season` entry.
+
+Getting this boundary wrong is a silent mispricing rather than an error: the two seasons share the same first-800 kWh price, so a wrong month mapping only shows up above 800 kWh, where the summer and winter rates diverge.
 
 ---
 

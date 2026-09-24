@@ -116,9 +116,10 @@ class UsageTier:
 class TieredUsageCharge:
     """A cumulative tiered usage charge that can vary by billing season.
 
-    Dominion Energy SC separates summer (June-September) from winter
-    (October-May) pricing. The ``tiers_by_season`` mapping provides a
-    distinct sequence of ``UsageTier`` objects for each season.
+    Dominion Energy SC separates summer (billing months May-September) from
+    winter (billing months October-April) pricing, as printed on the rate
+    schedules themselves. The ``tiers_by_season`` mapping provides a distinct
+    sequence of ``UsageTier`` objects for each season.
 
     Attributes:
         kind: Discriminant literal ``"tiered_usage"`` for type-narrowing.
