@@ -104,6 +104,7 @@ from .rates import (
     get_rate_plan_for_date,
     get_rate_plan_history,
 )
+from .time_of_use import TimeOfUseRate, get_time_of_use_rate, season_for
 
 __all__: list[str] = [
     "RATE_1",
@@ -149,6 +150,7 @@ __all__: list[str] = [
     "TieredUsageCharge",
     "TimeOfUseCharge",
     "TimeOfUsePeriod",
+    "TimeOfUseRate",
     "TimeWindow",
     "UsageRead",
     "UsageTier",
@@ -158,4 +160,6 @@ __all__: list[str] = [
     "get_rate_plan",
     "get_rate_plan_for_date",
     "get_rate_plan_history",
+    "get_time_of_use_rate",
+    "season_for",
 ]

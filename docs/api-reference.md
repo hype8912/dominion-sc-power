@@ -512,8 +512,9 @@ for charge in rate_plan.charges:
             # charge is TieredUsageCharge
             summer_tiers = charge.tiers_by_season[Season.SUMMER]
         case "time_of_use":
-            # charge is TimeOfUseCharge
-            ...
+            # charge is TimeOfUseCharge; price each interval by its local start time
+            rate = get_time_of_use_rate(rate_plan, interval_start)
+            energy_cost = rate.price_per_kwh * interval_kwh
 ```
 
 #### `TieredUsageCharge.tiers_by_season`
@@ -543,15 +544,18 @@ for period in summer_periods:
 ```
 
 A period can also be limited by day. `weekdays_only` restricts its windows to Monday-Friday, and `excluded_holidays`
-(a tuple of `Holiday`) removes the named holidays. Call `period.applies_on(local_date)` before matching windows;
-intervals on days the period does not apply to are billed by the other periods, ending with the fallback period.
-Rate 5 and Rate 7 tariffs before July 2026 use this for on-peak; the July 2026 tariffs apply on-peak every day.
+(a tuple of `Holiday`) removes the named holidays; `period.applies_on(local_date)` reports whether a period is in
+force on a date. Intervals on days a period does not apply to are billed by the other periods, ending with the
+fallback period. Rate 5 and Rate 7 tariffs before July 2026 use this for on-peak; the July 2026 tariffs apply
+on-peak every day.
+
+To price an interval, use `get_time_of_use_rate(plan, interval_start)` rather than matching periods yourself. It
+applies the season, the windows, and these day rules in one call (see
+[Time-of-use rate lookup](#time-of-use-rate-lookup)):
 
 ```python
-for period in summer_periods:
-    if not period.applies_on(interval_start.date()):
-        continue  # e.g. on-peak on a Saturday or on Thanksgiving
-    ...
+rate = get_time_of_use_rate(plan, datetime(2025, 11, 27, 7))  # Thanksgiving, 7 AM
+rate.period  # "off_peak": the 2025 tariff drops on-peak on holidays
 ```
 
 `Holiday.date_in(year)` returns a holiday's date. It is the holiday's actual date; the tariffs describe no observed date.
@@ -577,7 +581,7 @@ Season.SUMMER  # value: "summer"
 Season.WINTER  # value: "winter"
 ```
 
-Dominion Energy SC's published tariffs define summer as **billing months May through September** and winter as **billing months October through April** — the wording printed on each seasonal rate schedule (Rates 5, 6, 7 and 8). The library does not determine which season applies to a given date — that decision belongs to the consumer. When calculating costs from interval reads, check the billing month against these ranges to select the correct `tiers_by_season` or `periods_by_season` entry.
+Dominion Energy SC's published tariffs define summer as **billing months May through September** and winter as **billing months October through April** — the wording printed on each seasonal rate schedule (Rates 5, 6, 7 and 8). `season_for(day)` maps a date to a season by its **calendar** month, which is what `get_time_of_use_rate` uses (see [Time-of-use rate lookup](#time-of-use-rate-lookup)). To follow the tariff wording exactly, check the billing month against these ranges instead and select the matching `tiers_by_season` or `periods_by_season` entry yourself.
 
 Getting this boundary wrong is a silent mispricing rather than an error: the two seasons share the same first-800 kWh price, so a wrong month mapping only shows up above 800 kWh, where the summer and winter rates diverge.
 
@@ -717,6 +721,38 @@ onward. Returns `None` when the code is unknown or the date falls before the
 earliest recorded period (or in a gap between periods). For example,
 `get_rate_plan_for_date("rate_2", date(2025, 8, 1))` is `None` because `rate_2`
 has no recorded period before July 1, 2026.
+
+### Time-of-use rate lookup
+
+```python
+from datetime import datetime
+from dominionsc import get_rate_plan_for_date, get_time_of_use_rate, season_for
+
+when = datetime(2025, 11, 27, 7, 0)  # Thanksgiving morning
+plan = get_rate_plan_for_date("rate_5", when.date())
+if plan is None:
+    raise LookupError("no rate_5 tariff recorded for that date")
+rate = get_time_of_use_rate(plan, when)
+print(rate.period, rate.price_per_kwh, rate.season)  # off_peak 0.13701 winter
+```
+
+`get_time_of_use_rate(plan, when)` returns a `TimeOfUseRate` (`period`, `price_per_kwh`, `season`) for the
+moment `when`. It applies the season, the clock windows, and each period's weekday and holiday rules
+(`TimeOfUsePeriod.applies_on`). A naive `datetime` is read as local time; an aware one is converted to
+`America/New_York`. For interval data, pass the interval's start time.
+
+Pass the plan that was in effect at `when` (`get_rate_plan_for_date`), because the rules differ between tariff
+periods. `get_rate_plan_for_date` returns `None` when no period is recorded, so check for that first.
+
+`get_time_of_use_rate` raises `ValueError` if the plan has no time-of-use charge (anything other than Rates 5
+and 7), if `when` falls outside the plan's effective dates, or if the plan has no periods or no fallback period
+for the season. Clock windows are half-open (`[start, end)`), and a window whose end is before its start
+crosses midnight.
+
+`season_for(day)` returns `Season.SUMMER` for May-September and `Season.WINTER` otherwise. It uses the
+**calendar** month of `day`, not the billing month the tariffs name, so each interval is priced by the month it
+falls in and a billing cycle that spans a season boundary is split between seasons. To price by billing month
+instead, pick the season yourself and read `TimeOfUseCharge.periods_by_season` directly.
 
 ---
 

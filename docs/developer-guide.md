@@ -56,6 +56,7 @@ dominion-sc-power/
 │   ├── cli.py              # CLI argument parser and runner
 │   ├── rates.py            # Public rate plan entry point: assembles the plans, mappings, history, and lookups
 │   ├── rate_plans/         # One module per rate plan (RATE_*, archived periods, HISTORY) plus _common.py
+│   ├── time_of_use.py      # get_time_of_use_rate(), TimeOfUseRate, season_for()
 │   │
 │   ├── models/             # Pure data classes (no network, no logic)
 │   │   ├── account.py      # AccountInfo
@@ -77,6 +78,7 @@ dominion-sc-power/
 │   ├── test_parsers.py
 │   ├── test_cli.py
 │   ├── test_rates.py
+│   ├── test_time_of_use.py
 │   ├── test_helpers.py
 │   ├── test_headers.py
 │   ├── test_urls.py
@@ -397,6 +399,10 @@ RatePlan
 
 Separated from `__main__.py` so it can be imported and tested without running argparse or `asyncio.run()`. `build_parser()` returns an `argparse.ArgumentParser`. `run(args)` is the async main function. `main()` is the entry point called by `__main__.py`.
 
+### `time_of_use.py` — Time-of-use rate lookup
+
+`get_time_of_use_rate(plan, when)` prices one moment against a plan's `TimeOfUseCharge`. It converts `when` to `America/New_York` (naive values are taken as already local), checks the date is inside the plan's effective dates, picks the season with `season_for()` (calendar month), and returns the first period whose `applies_on(day)` is true and whose window contains the local clock time, falling back to the `fallback=True` period. Windows are half-open and may cross midnight. It does not look up the plan itself: callers pass the period in force, usually from `get_rate_plan_for_date()`.
+
 ### `helpers.py`
 
 Single function: `create_cookie_jar()`. Always pass the result to `aiohttp.ClientSession`. See the function docstring for why `quote_cookie=False` is required.
@@ -429,6 +435,7 @@ uv run pytest --cov=dominionsc --cov-report=term-missing
 | `test_parsers.py` | `parse_registers()`, `parse_usage_reads()`, `parse_forecast()` | Pure/fixture-based |
 | `test_cli.py` | `build_parser()`, `run()`, `_handle_mfa()` | Mocked async |
 | `test_rates.py` | Rate plan catalog, superseded periods, and history lookups | Pure assertions |
+| `test_time_of_use.py` | `get_time_of_use_rate()`, `season_for()`: periods, holidays, windows, time zones, errors | Pure assertions |
 | `test_helpers.py` | `create_cookie_jar()` | Pure assertions |
 | `test_headers.py` | All header builder functions | Pure assertions |
 | `test_urls.py` | All URL builder functions | Pure assertions with mocked `cache_buster` |

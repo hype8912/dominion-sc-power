@@ -359,7 +359,7 @@ Each charge in `plan.charges` is one of six concrete types, distinguished by the
 | `"monthly"` | `MonthlyCharge` | `charge.amount` = fixed portion per cycle |
 | `"flat_usage"` | `FlatUsageCharge` | `charge.price_per_unit * total_kwh` = variable portion |
 | `"tiered_usage"` | `TieredUsageCharge` | Apply `charge.tiers_by_season[Season.SUMMER]` or `[Season.WINTER]` tier breaks to cumulative usage |
-| `"time_of_use"` | `TimeOfUseCharge` | Match each 15-min interval's local start time against `charge.periods_by_season[season]` windows, skipping any period where `period.applies_on(local_date)` is false (Rate 5 on-peak before July 2026 is Monday-Friday, excluding holidays; from July 2026 it applies every day) |
+| `"time_of_use"` | `TimeOfUseCharge` | Price each 15-min interval with `get_time_of_use_rate(plan, interval_start)`, using the plan from `get_rate_plan_for_date(code, interval_start.date())`. It applies the season, the clock windows, and `period.applies_on(local_date)` (Rate 5 and 7 on-peak before July 2026 is Monday-Friday, excluding holidays; from July 2026 it applies every day) |
 | `"demand"` | `DemandCharge` | `charge.price_per_kw * peak_kw` where peak is the max 15-min average during `charge.qualifying_period` |
 
 **Example — display all charges for a plan:**

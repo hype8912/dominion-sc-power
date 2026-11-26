@@ -176,7 +176,9 @@ class TimeWindow:
 
     Used by ``TimeOfUsePeriod`` to define which hours qualify for a given
     time-of-use price. Times are evaluated in the utility's local timezone
-    (``America/New_York``).
+    (``America/New_York``). A window whose ``end`` is before its ``start``
+    crosses midnight (for example 10 PM to 2 AM, or ``time(22)`` to
+    ``time(0)`` for 10 PM to midnight).
 
     Attributes:
         start: Inclusive start time (local clock, e.g. ``time(16, 0)`` for 4 PM).

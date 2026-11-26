@@ -11,6 +11,9 @@ bumped for a release.
 
 ### Added
 
+- `get_time_of_use_rate(plan, when)`, `TimeOfUseRate`, and `season_for(day)`: return the on-peak / off-peak /
+  super-off-peak price in force at a given moment, including weekday and holiday rules. Seasons are chosen by
+  calendar month, and a `TimeWindow` whose end is before its start crosses midnight.
 - `RatePlan.source_url`: link to the published tariff document a plan was transcribed from (empty string when
   not recorded).
 - Superseded tariff periods, archived as `RatePlan` objects with `effective_to` set and their `source_url`:
