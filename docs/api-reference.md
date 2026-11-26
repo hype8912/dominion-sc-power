@@ -463,6 +463,7 @@ from dominionsc import (
     UsageTier,
     TimeOfUsePeriod,
     TimeWindow,
+    Holiday,
     EligibilityRule,
     Adjustment,
     Commodity,
@@ -540,6 +541,20 @@ for period in summer_periods:
         for window in period.windows:
             print(f"{period.name}: ${period.price_per_unit}/kWh from {window.start} to {window.end}")
 ```
+
+A period can also be limited by day. `weekdays_only` restricts its windows to Monday-Friday, and `excluded_holidays`
+(a tuple of `Holiday`) removes the named holidays. Call `period.applies_on(local_date)` before matching windows;
+intervals on days the period does not apply to are billed by the other periods, ending with the fallback period.
+Rate 5 and Rate 7 tariffs before July 2026 use this for on-peak; the July 2026 tariffs apply on-peak every day.
+
+```python
+for period in summer_periods:
+    if not period.applies_on(interval_start.date()):
+        continue  # e.g. on-peak on a Saturday or on Thanksgiving
+    ...
+```
+
+`Holiday.date_in(year)` returns a holiday's date. It is the holiday's actual date; the tariffs describe no observed date.
 
 #### `Commodity`
 

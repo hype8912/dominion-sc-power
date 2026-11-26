@@ -15,7 +15,9 @@ RATE_7: RatePlan = RatePlan(
     charges=(
         DailyCharge(name="Basic Facilities Charge", amount=Decimal("0.42740")),
         *ELECTRIC_FIXED_CHARGES,
-        time_of_use_charge("0.17441", "0.10124", "0.08841"),
+        # The July 2026 tariff (PSC Order No. 2026-374) has no "Monday-Friday, excluding holidays" wording, so
+        # on-peak applies every day. The 2025 period below limits on-peak to weekdays excluding holidays.
+        time_of_use_charge("0.17441", "0.10124", "0.08841", winter_midday_super_off_peak=True),
         DemandCharge(
             name="On-Peak Billing Demand",
             price_per_kw=Decimal("10.90"),
@@ -29,7 +31,9 @@ RATE_7: RatePlan = RatePlan(
 )
 
 # Effective for bills rendered on and after July 23, 2025 (PSC Order No. 2021-570). The Basic Facilities Charge
-# was $13.00 per month, and the on-peak windows and 15-minute rolling demand interval were unchanged.
+# was $13.00 per month, and the 15-minute rolling demand interval was unchanged. On-peak used the same clock hours as
+# the current plan but only Monday-Friday, excluding holidays, and super-off-peak was 1-5 AM year round, with no
+# winter 12-3 PM window.
 RATE_7_2025: RatePlan = RatePlan(
     code="rate_7",
     name="Rate 7 - Residential Service: Time-of-Use Demand",
@@ -39,7 +43,7 @@ RATE_7_2025: RatePlan = RatePlan(
     charges=(
         DailyCharge(name="Basic Facilities Charge", amount=Decimal("0.42740")),
         *ELECTRIC_FIXED_CHARGES,
-        time_of_use_charge("0.15983", "0.09161", "0.08372"),
+        time_of_use_charge("0.15983", "0.09161", "0.08372", on_peak_weekdays_only=True),
         DemandCharge(
             name="On-Peak Billing Demand",
             price_per_kw=Decimal("9.80"),

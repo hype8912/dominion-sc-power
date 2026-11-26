@@ -454,3 +454,63 @@ def test_rate_plan_for_date_selects_period():
     assert get_rate_plan_for_date("rate_2", date(2025, 8, 1)) is RATE_2_2025
     assert get_rate_plan_for_date("rate_2", date(2025, 7, 22)) is None
     assert get_rate_plan_for_date("not_a_rate", date(2026, 8, 1)) is None
+
+
+def test_holiday_dates():
+    """Holiday dates resolve to the right day of the year."""
+    from dominionsc.models.rate_plan import Holiday
+
+    assert Holiday.MEMORIAL_DAY.date_in(2025) == date(2025, 5, 26)
+    assert Holiday.LABOR_DAY.date_in(2025) == date(2025, 9, 1)
+    assert Holiday.THANKSGIVING_DAY.date_in(2025) == date(2025, 11, 27)
+    assert Holiday.THANKSGIVING_DAY.date_in(2026) == date(2026, 11, 26)
+    assert Holiday.NEW_YEARS_DAY.date_in(2026) == date(2026, 1, 1)
+    assert Holiday.INDEPENDENCE_DAY.date_in(2026) == date(2026, 7, 4)
+    assert Holiday.CHRISTMAS_DAY.date_in(2026) == date(2026, 12, 25)
+
+
+def test_rate_5_on_peak_is_weekdays_excluding_holidays():
+    """Rate 5 and 7 on-peak before July 2026 skips weekends and the six tariff holidays; other periods are unaffected."""
+    for plan in (RATE_5_2025, RATE_5_2024, RATE_7_2025):
+        for periods in _tou_charge(plan).periods_by_season.values():
+            on_peak, *others = periods
+            assert on_peak.name == "on_peak"
+            assert on_peak.applies_on(date(2026, 11, 25))  # Wednesday
+            assert not on_peak.applies_on(date(2026, 11, 28))  # Saturday
+            assert not on_peak.applies_on(date(2026, 11, 29))  # Sunday
+            assert not on_peak.applies_on(date(2026, 11, 26))  # Thanksgiving (Thursday)
+            assert not on_peak.applies_on(date(2026, 12, 25))  # Christmas (Friday)
+            assert not on_peak.applies_on(date(2026, 5, 25))  # Memorial Day (Monday)
+            assert all(p.applies_on(date(2026, 11, 28)) for p in others)
+
+
+def test_rate_5_current_on_peak_applies_every_day():
+    """The July 2026 Rate 5 tariff dropped the weekday/holiday limit, so on-peak applies on weekends and holidays."""
+    for periods in _tou_charge(RATE_5).periods_by_season.values():
+        on_peak = periods[0]
+        assert on_peak.name == "on_peak"
+        for day in (date(2026, 11, 28), date(2026, 11, 29), date(2026, 11, 26), date(2026, 12, 25)):
+            assert on_peak.applies_on(day)
+
+
+def test_rate_7_current_on_peak_applies_every_day():
+    """The July 2026 Rate 7 tariff has no weekday/holiday limit on on-peak."""
+    for periods in _tou_charge(RATE_7).periods_by_season.values():
+        assert periods[0].applies_on(date(2026, 11, 28))
+        assert periods[0].applies_on(date(2026, 12, 25))
+
+
+def test_winter_midday_super_off_peak_only_from_july_2026():
+    """The noon-3 PM winter super-off-peak window exists only in the July 2026 tariffs."""
+    for current, older in ((RATE_5, (RATE_5_2025, RATE_5_2024)), (RATE_7, (RATE_7_2025,))):
+        winter = {p.name: p for p in _tou_charge(current).periods_by_season[Season.WINTER]}
+        assert [(w.start, w.end) for w in winter["super_off_peak"].windows] == [
+            (time(1), time(5)),
+            (time(12), time(15)),
+        ]
+        for plan in older:
+            charge = _tou_charge(plan)
+            winter = {p.name: p for p in charge.periods_by_season[Season.WINTER]}
+            assert [(w.start, w.end) for w in winter["super_off_peak"].windows] == [(time(1), time(5))]
+            summer = {p.name: p for p in charge.periods_by_season[Season.SUMMER]}
+            assert [(w.start, w.end) for w in summer["super_off_peak"].windows] == [(time(1), time(5))]

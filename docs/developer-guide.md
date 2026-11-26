@@ -326,7 +326,7 @@ All pure data with no business logic.
 | `TieredUsageCharge` | Tiered blocks that can vary by `Season` |
 | `UsageTier` | One cumulative tier within `TieredUsageCharge` |
 | `TimeOfUseCharge` | Time-of-day pricing that can vary by `Season` |
-| `TimeOfUsePeriod` | One named period (on-peak / off-peak / super-off-peak) |
+| `TimeOfUsePeriod` | One named period (on-peak / off-peak / super-off-peak); can be limited to weekdays and exclude `Holiday`s via `applies_on(day)` |
 | `TimeWindow` | A `[start, end)` clock-time range within a `TimeOfUsePeriod` |
 | `DemandCharge` | Peak kW demand charge |
 | `EligibilityRule` | Informational eligibility requirement |
@@ -380,7 +380,8 @@ RatePlan
 │   ├── TimeOfUseCharge      kind="time_of_use" — rate by time-of-day, varies by Season
 │   │   └── periods_by_season: {Season → tuple[TimeOfUsePeriod, ...]}
 │   │       └── TimeOfUsePeriod
-│   │           └── windows: tuple[TimeWindow, ...]
+│   │           ├── windows: tuple[TimeWindow, ...]
+│   │           └── weekdays_only, excluded_holidays: tuple[Holiday, ...]
 │   └── DemandCharge         kind="demand"      — $/kW of peak demand
 ├── eligibility_rules: tuple[EligibilityRule, ...]  — informational
 └── adjustments: tuple[Adjustment, ...]             — informational
@@ -390,6 +391,7 @@ RatePlan
 - `Commodity` — `ELECTRICITY` / `GAS` (StrEnum values: `"electricity"` / `"gas"`)
 - `UsageUnit` — `KWH` / `THERM` (StrEnum values: `"kWh"` / `"therm"`)
 - `Season` — `SUMMER` / `WINTER` (StrEnum values: `"summer"` / `"winter"`)
+- `Holiday` — the six holidays named in time-of-use tariffs (New Year's Day, Memorial Day, Independence Day, Labor Day, Thanksgiving Day, Christmas Day)
 
 ### `cli.py` — Command-line interface
 

@@ -15,7 +15,9 @@ RATE_5: RatePlan = RatePlan(
     charges=(
         DailyCharge(name="Basic Facilities Charge", amount=Decimal("0.42740")),
         *ELECTRIC_FIXED_CHARGES,
-        time_of_use_charge("0.29907", "0.15074", "0.09623"),
+        # The July 2026 tariff (PSC Order No. 2026-374) removed the "Monday-Friday, excluding holidays" wording, so
+        # on-peak applies every day. Earlier periods below limit on-peak to weekdays excluding holidays.
+        time_of_use_charge("0.29907", "0.15074", "0.09623", winter_midday_super_off_peak=True),
     ),
     adjustments=ELECTRIC_ADJUSTMENTS,
     source_url="https://cdn-dominionenergy-prd-001.azureedge.net/-/media/content/rates-and-tariffs/pdfs/south-carolina/electric/rates/rate5.pdf?rev=a67167d53f2542c4b67103d5aad1b9e6",
@@ -33,14 +35,15 @@ RATE_5_2025: RatePlan = RatePlan(
     charges=(
         DailyCharge(name="Basic Facilities Charge", amount=Decimal("0.42740")),
         *ELECTRIC_FIXED_CHARGES,
-        time_of_use_charge("0.26900", "0.13701", "0.09064"),
+        time_of_use_charge("0.26900", "0.13701", "0.09064", on_peak_weekdays_only=True),
     ),
     adjustments=ELECTRIC_ADJUSTMENTS,
     source_url="https://web.archive.org/web/20251205175001/https://cdn-dominionenergy-prd-001.azureedge.net/-/media/content/rates-and-tariffs/pdfs/south-carolina/electric/rates/rate5.pdf?rev=3e32c127f0434e63a729bdb04e4bb2cc&hash=0D18F5DA9531447A7C88E31E4296C79B",
 )
 
 # Superseded tariff periods. The published Basic Facilities Charge was $13.00 per month in all of them (the same
-# 0.42740 per day used by the current plan), and the on-peak / off-peak / super-off-peak windows were unchanged.
+# 0.42740 per day used by the current plan). On-peak used the same clock hours as the current plan but only
+# Monday-Friday, excluding holidays, and super-off-peak was 1-5 AM year round, with no winter 12-3 PM window.
 
 # Effective for service rendered on and after September 1, 2024 (PSC Order No. 2024-610).
 RATE_5_2024: RatePlan = RatePlan(
@@ -52,7 +55,7 @@ RATE_5_2024: RatePlan = RatePlan(
     charges=(
         DailyCharge(name="Basic Facilities Charge", amount=Decimal("0.42740")),
         *ELECTRIC_FIXED_CHARGES,
-        time_of_use_charge("0.26139", "0.12940", "0.08303"),
+        time_of_use_charge("0.26139", "0.12940", "0.08303", on_peak_weekdays_only=True),
     ),
     adjustments=ELECTRIC_ADJUSTMENTS,
     source_url="https://etariff.psc.sc.gov/Uploads/tariffFile/0969f054-7572-49cb-89df-9bbff8ce58ea",

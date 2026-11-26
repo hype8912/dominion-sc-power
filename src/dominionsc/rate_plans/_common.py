@@ -6,6 +6,7 @@ from types import MappingProxyType
 
 from ..models.rate_plan import (
     Adjustment,
+    Holiday,
     MonthlyCharge,
     Season,
     TieredUsageCharge,
@@ -35,6 +36,16 @@ GAS_ADJUSTMENTS: tuple[Adjustment, ...] = (
     Adjustment(
         "weather_normalization", "Weather Normalization Adjustment", "Applies to November-April billing months.", False
     ),
+)
+
+
+ON_PEAK_EXCLUDED_HOLIDAYS: tuple[Holiday, ...] = (
+    Holiday.NEW_YEARS_DAY,
+    Holiday.MEMORIAL_DAY,
+    Holiday.INDEPENDENCE_DAY,
+    Holiday.LABOR_DAY,
+    Holiday.THANKSGIVING_DAY,
+    Holiday.CHRISTMAS_DAY,
 )
 
 
@@ -72,39 +83,64 @@ def seasonal_tiers(summer_under: str, summer_over: str, winter_under: str, winte
     )
 
 
-def time_of_use_charge(on_peak: str, off_peak: str, super_off_peak: str) -> TimeOfUseCharge:
+def time_of_use_charge(
+    on_peak: str,
+    off_peak: str,
+    super_off_peak: str,
+    *,
+    on_peak_weekdays_only: bool = False,
+    winter_midday_super_off_peak: bool = False,
+) -> TimeOfUseCharge:
     """Build the on-peak / off-peak / super-off-peak energy charge shared by Rates 5 and 7.
 
     The same three prices apply in both seasons; only the clock windows differ:
 
     - Summer: on-peak 4-8 PM; super-off-peak 1-5 AM.
-    - Winter: on-peak 6-9 AM; super-off-peak 1-5 AM and 12-3 PM.
+    - Winter: on-peak 6-9 AM; super-off-peak 1-5 AM, plus 12-3 PM when ``winter_midday_super_off_peak`` is set.
     - All other hours fall back to off-peak.
 
     Args:
         on_peak: On-peak price, $/kWh, as a decimal string.
         off_peak: Off-peak price, $/kWh, as a decimal string.
         super_off_peak: Super-off-peak price, $/kWh, as a decimal string.
+        on_peak_weekdays_only: If ``True``, on-peak applies Monday-Friday only, excluding ``ON_PEAK_EXCLUDED_HOLIDAYS``;
+            weekends and holidays are billed off-peak (or super-off-peak in its hours).
+        winter_midday_super_off_peak: If ``True``, winter (October-April) super-off-peak also covers 12-3 PM, as in
+            the July 2026 tariffs (PSC Order No. 2026-374). Earlier tariffs define super-off-peak as 1-5 AM only.
 
     Returns:
         A ``TimeOfUseCharge`` named ``"Energy"``.
 
     """
+    excluded_holidays = ON_PEAK_EXCLUDED_HOLIDAYS if on_peak_weekdays_only else ()
+    midday = (TimeWindow(time(12), time(15)),) if winter_midday_super_off_peak else ()
     return TimeOfUseCharge(
         name="Energy",
         periods_by_season=MappingProxyType(
             {
                 Season.SUMMER: (
-                    TimeOfUsePeriod("on_peak", Decimal(on_peak), (TimeWindow(time(16), time(20)),)),
+                    TimeOfUsePeriod(
+                        "on_peak",
+                        Decimal(on_peak),
+                        (TimeWindow(time(16), time(20)),),
+                        weekdays_only=on_peak_weekdays_only,
+                        excluded_holidays=excluded_holidays,
+                    ),
                     TimeOfUsePeriod("super_off_peak", Decimal(super_off_peak), (TimeWindow(time(1), time(5)),)),
                     TimeOfUsePeriod("off_peak", Decimal(off_peak), fallback=True),
                 ),
                 Season.WINTER: (
-                    TimeOfUsePeriod("on_peak", Decimal(on_peak), (TimeWindow(time(6), time(9)),)),
+                    TimeOfUsePeriod(
+                        "on_peak",
+                        Decimal(on_peak),
+                        (TimeWindow(time(6), time(9)),),
+                        weekdays_only=on_peak_weekdays_only,
+                        excluded_holidays=excluded_holidays,
+                    ),
                     TimeOfUsePeriod(
                         "super_off_peak",
                         Decimal(super_off_peak),
-                        (TimeWindow(time(1), time(5)), TimeWindow(time(12), time(15))),
+                        (TimeWindow(time(1), time(5)), *midday),
                     ),
                     TimeOfUsePeriod("off_peak", Decimal(off_peak), fallback=True),
                 ),

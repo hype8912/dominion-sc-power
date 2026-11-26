@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass, field
+from datetime import date as _date
+from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
 from typing import TYPE_CHECKING, Literal, TypeAlias
@@ -31,6 +34,37 @@ class Season(StrEnum):
 
     SUMMER = "summer"
     WINTER = "winter"
+
+
+class Holiday(StrEnum):
+    """Holidays named by Dominion Energy SC time-of-use tariffs.
+
+    Dates are the calendar dates of the holiday itself; the tariffs do not
+    describe an observed date when the holiday falls on a weekend.
+    """
+
+    NEW_YEARS_DAY = "new_years_day"
+    MEMORIAL_DAY = "memorial_day"
+    INDEPENDENCE_DAY = "independence_day"
+    LABOR_DAY = "labor_day"
+    THANKSGIVING_DAY = "thanksgiving_day"
+    CHRISTMAS_DAY = "christmas_day"
+
+    def date_in(self, year: int) -> _date:
+        """Return the date of this holiday in ``year``."""
+        if self is Holiday.NEW_YEARS_DAY:
+            return _date(year, 1, 1)
+        if self is Holiday.INDEPENDENCE_DAY:
+            return _date(year, 7, 4)
+        if self is Holiday.CHRISTMAS_DAY:
+            return _date(year, 12, 25)
+        if self is Holiday.MEMORIAL_DAY:  # last Monday of May
+            last = _date(year, 5, calendar.monthrange(year, 5)[1])
+            return last - timedelta(days=last.weekday())
+        first = _date(year, 9 if self is Holiday.LABOR_DAY else 11, 1)
+        if self is Holiday.LABOR_DAY:  # first Monday of September
+            return first + timedelta(days=(0 - first.weekday()) % 7)
+        return first + timedelta(days=(3 - first.weekday()) % 7 + 21)  # 4th Thursday of November
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,9 +194,10 @@ class TimeOfUsePeriod:
 
     A ``TimeOfUseCharge`` groups several ``TimeOfUsePeriod`` objects per
     season. During billing, each 15-minute interval is matched against the
-    active ``TimeOfUsePeriod`` by checking whether the interval's local
+    active ``TimeOfUsePeriod`` by checking whether the period
+    ``applies_on`` the interval's local date and the interval's local
     start time falls inside any of the period's ``windows``. If no
-    ``windows`` match, the period with ``fallback=True`` is used.
+    period matches, the period with ``fallback=True`` is used.
 
     Attributes:
         name: Stable identifier for this period (e.g., ``"on_peak"``,
@@ -173,6 +208,12 @@ class TimeOfUsePeriod:
         fallback: If ``True``, this period applies to all intervals that
             do not match any other period's ``windows``. Exactly one period
             per season should set this to ``True``.
+        weekdays_only: If ``True``, ``windows`` only apply Monday-Friday;
+            on Saturday and Sunday the period does not apply.
+        excluded_holidays: Holidays on which ``windows`` do not apply. Use
+            ``applies_on(day)`` to check a date. Intervals the period does
+            not apply to fall through to other periods and, ultimately, the
+            fallback period.
 
     """
 
@@ -180,6 +221,14 @@ class TimeOfUsePeriod:
     price_per_unit: Decimal
     windows: tuple[TimeWindow, ...] = ()
     fallback: bool = False
+    weekdays_only: bool = False
+    excluded_holidays: tuple[Holiday, ...] = ()
+
+    def applies_on(self, day: _date) -> bool:
+        """Return whether this period's windows are in force on ``day``."""
+        if self.weekdays_only and day.weekday() >= 5:
+            return False
+        return not any(holiday.date_in(day.year) == day for holiday in self.excluded_holidays)
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,7 +237,8 @@ class TimeOfUseCharge:
 
     Rates differ by ``Season`` (summer vs. winter) and by ``TimeOfUsePeriod``
     (on-peak, off-peak, super-off-peak). Each 15-minute interval is billed
-    at the rate for the period that was active at the interval's local start time.
+    at the rate for the period that was active at the interval's local start time,
+    taking each period's ``applies_on`` day rules into account.
 
     Attributes:
         kind: Discriminant literal ``"time_of_use"`` for type-narrowing.

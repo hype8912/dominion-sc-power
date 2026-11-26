@@ -24,6 +24,10 @@ bumped for a release.
   the same way, as is Rate 32S's September 2025 tariff.
 - `time_of_use_charge()` in `rate_plans/_common.py` builds the on-peak / off-peak / super-off-peak energy charge
   shared by Rates 5 and 7.
+- `Holiday` enum (New Year's Day, Memorial Day, Independence Day, Labor Day, Thanksgiving Day, Christmas Day) with
+  `date_in(year)`, and `TimeOfUsePeriod.weekdays_only`, `TimeOfUsePeriod.excluded_holidays` and
+  `TimeOfUsePeriod.applies_on(day)`, so a period's windows can be limited to weekdays excluding holidays.
+- `time_of_use_charge()` options `on_peak_weekdays_only` and `winter_midday_super_off_peak`.
 - `get_rate_plan_history(code)` returns every known period for a rate code,
   oldest first (the last entry is the current plan), and
   `get_rate_plan_for_date(code, on)` returns the plan in effect on a date, so
@@ -54,6 +58,10 @@ bumped for a release.
 
 ### Fixed
 
+- **Rate 5 and Rate 7 time-of-use windows before July 2026.** `RATE_5_2024`, `RATE_5_2025` and `RATE_7_2025` now
+  limit on-peak to Monday-Friday excluding the six tariff holidays, and define super-off-peak as 1-5 AM only
+  (no winter 12-3 PM window), as those tariffs state. The July 2026 plans (`RATE_5`, `RATE_7`) keep on-peak every
+  day and the winter 12-3 PM super-off-peak window (PSC Order No. 2026-374).
 - **Gas consumption was inflated 1000x.** The Green Button parser ignored the
   `powerOfTenMultiplier` declared on each feed's `ReadingType`. Dominion's gas
   feed reports cubic feet (`uom=119`) with a multiplier of `-3`, so raw values
