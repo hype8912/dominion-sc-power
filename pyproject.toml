@@ -9,7 +9,7 @@ description = "Async library for accessing Dominion Energy SC API"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "aiohttp>=3.8",
+    "aiohttp>=3.14.4",
     "tzdata>=2026.3",
     "xmltodict>=1.0.2",
 ]
