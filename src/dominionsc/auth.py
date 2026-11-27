@@ -248,8 +248,8 @@ class LoginFlow:
         """
         if login_data is None:
             login_data: dict[str, str] = {}  # {tfa_token: tfa_token}
-        tfa_token: str = str(login_data.get("tfa_token", ""))
 
+        tfa_token: str = str(login_data.get("tfa_token", ""))
         url_handler: DominionSCURLHandler = DominionSCURLHandler(session=session)
         config: UtilityConfig = self._config
 
@@ -271,6 +271,7 @@ class LoginFlow:
             r1_status: str = json.loads(r1)["data"]["status"]
         except Exception as err:
             raise ApiException("Unable to decode Authenticate data status.", url=url1, response_text=r1) from err
+
         # Only the TFA path is implemented, so "twoFA" is the only status that lets
         # login continue; any other status is treated as an authentication failure.
         if r1_status == "failed":
@@ -324,7 +325,6 @@ class LoginFlow:
 
         url5: str = _urls.init_account_url(config)
         r5: str = await url_handler.call_api("get", url5, ajax_headers)
-
         try:
             service_address_and_account_no: str = json.loads(r5)["data"]["account"]["serviceAddressAndAccountNo"]
         except Exception as err:

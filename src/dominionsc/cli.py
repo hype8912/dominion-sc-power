@@ -137,6 +137,7 @@ async def _handle_mfa(
     if login_data_file:
         with open(login_data_file, "w") as file:
             json.dump(login_data, file, indent=4)
+
     dominionsc.login_data = login_data
     await dominionsc.async_login()
     return True
