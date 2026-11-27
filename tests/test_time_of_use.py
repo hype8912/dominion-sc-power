@@ -2,7 +2,7 @@
 
 from collections import Counter
 from dataclasses import replace
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from itertools import product
 from types import MappingProxyType
@@ -94,6 +94,55 @@ def test_aware_datetime_is_converted_to_local_time() -> None:
     assert get_time_of_use_rate(RATE_5, utc).period == "on_peak"
 
 
+UTC = ZoneInfo("UTC")
+
+
+def test_aware_winter_datetime_uses_standard_time_offset() -> None:
+    """In winter the local offset is UTC-5 (EST), not the summer UTC-4."""
+    assert get_time_of_use_rate(RATE_5, datetime(2026, 12, 10, 11, 0, tzinfo=UTC)).period == "on_peak"  # 6:00 AM EST
+    assert get_time_of_use_rate(RATE_5, datetime(2026, 12, 10, 10, 30, tzinfo=UTC)).period == "off_peak"  # 5:30 AM EST
+
+
+def test_plan_effective_dates_use_local_date() -> None:
+    """2026-07-01 03:00 UTC is June 30 at 11 PM locally, so it belongs to the 2025 plan, not the July 2026 one."""
+    instant = datetime(2026, 7, 1, 3, 0, tzinfo=UTC)
+    with pytest.raises(ValueError, match="2026-06-30 is outside"):
+        get_time_of_use_rate(RATE_5, instant)
+    assert get_time_of_use_rate(RATE_5_2025, instant).period == "off_peak"
+
+
+def test_holiday_uses_local_date() -> None:
+    """Thanksgiving 2025 at 12:00 UTC is 7 AM EST on Thanksgiving, so on-peak does not apply."""
+    assert get_time_of_use_rate(RATE_5_2025, datetime(2025, 11, 27, 12, 0, tzinfo=UTC)).period == "off_peak"
+    assert get_time_of_use_rate(RATE_5_2025, datetime(2025, 11, 28, 12, 0, tzinfo=UTC)).period == "on_peak"
+
+
+def test_effective_dates_are_inclusive_at_plan_handover() -> None:
+    """The last moment of the 2025 plan and the first of the July 2026 plan are both accepted."""
+    assert get_time_of_use_rate(RATE_5_2025, datetime(2026, 6, 30, 23, 59, 59)).price_per_kwh == Decimal("0.13701")
+    assert get_time_of_use_rate(RATE_5, datetime(2026, 7, 1, 0, 0)).price_per_kwh == Decimal("0.15074")
+
+
+def test_repeated_hour_at_fall_back() -> None:
+    """Both 1:30 AM instants on 2026-11-01 (EDT, then EST) are super-off-peak."""
+    first = datetime(2026, 11, 1, 5, 30, tzinfo=UTC)  # 1:30 AM EDT
+    second = datetime(2026, 11, 1, 6, 30, tzinfo=UTC)  # 1:30 AM EST, one hour later
+    assert get_time_of_use_rate(RATE_5, first).period == "super_off_peak"
+    assert get_time_of_use_rate(RATE_5, second).period == "super_off_peak"
+
+
+def test_sub_second_time_before_window_end() -> None:
+    """A moment a microsecond before a window's end is still inside it."""
+    assert get_time_of_use_rate(RATE_5, datetime(2026, 8, 3, 19, 59, 59, 999999)).period == "on_peak"
+
+
+def test_fixed_offset_timezone() -> None:
+    """A fixed-offset tzinfo is converted the same way as a ZoneInfo."""
+    edt = timezone(timedelta(hours=-4))
+    assert get_time_of_use_rate(RATE_5, datetime(2026, 8, 3, 16, 0, tzinfo=edt)).period == "on_peak"
+    assert get_time_of_use_rate(RATE_5, datetime(2026, 8, 3, 15, 59, tzinfo=edt)).period == "off_peak"
+
+
 def test_rejects_plan_without_time_of_use_charge() -> None:
     """Plans with no time-of-use charge raise ValueError."""
     with pytest.raises(ValueError, match="no time-of-use charge"):
@@ -108,6 +157,10 @@ def test_rejects_date_outside_plan_period() -> None:
         get_time_of_use_rate(RATE_5_2025, datetime(2026, 7, 1, 17))
 
 
+# Holiday coverage for the older tariff periods is deliberately partial: of the 2024 plan's holidays only
+# Thanksgiving is tested, and Memorial Day 2026 under the 2025 plan is not tested. The Home Assistant
+# integration imports at most 365 days of history, so 2024-era intervals are not priced in practice, and the
+# holiday rule itself is shared by every pre-July-2026 plan through time_of_use_charge(on_peak_weekdays_only=True).
 @pytest.mark.parametrize(
     "when",
     [
