@@ -882,9 +882,9 @@ price_net_usage(plan, when, used, generated, unit, *, cycle_usage_before=0, ther
 
 ```python
 result = price_net_usage(RATE_8, when, 10_000, 5_000, MeterUnit.WATT_HOUR)  # 10 kWh used, 5 kWh generated
-result.usage.amount       # cost of the 10 kWh used
+result.usage.amount  # cost of the 10 kWh used
 result.generation.amount  # credit for the 5 kWh generated (negative)
-result.amount             # net: the same as pricing 5 kWh
+result.amount  # net: the same as pricing 5 kWh
 ```
 
 `NetUsageCost` has `usage` and `generation` (each a full `UsageCost`), plus the net `amount` and net
@@ -905,7 +905,14 @@ plans), `unpriced_charges`.
 ### Billing cycles and `UsagePricer`
 
 ```python
-from dominionsc import BillingCycle, UsagePricer, billing_cycle_length, estimate_billing_cycles, find_billing_cycle, fixed_charges
+from dominionsc import (
+    BillingCycle,
+    UsagePricer,
+    billing_cycle_length,
+    estimate_billing_cycles,
+    find_billing_cycle,
+    fixed_charges,
+)
 ```
 
 Dominion doesn't expose past billing-cycle boundaries, so they are estimated from the forecast's current

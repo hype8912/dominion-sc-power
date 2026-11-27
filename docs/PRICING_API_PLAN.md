@@ -148,6 +148,7 @@ All new public names are re-exported from `dominionsc/__init__.py`.
 ```python
 UTILITY_TIMEZONE: ZoneInfo  # the existing LOCAL_TIMEZONE, exported; keep LOCAL_TIMEZONE as an alias
 
+
 def utility_local_date(when: datetime) -> date:
     """Calendar date of *when* in the utility's timezone. Naive values are read as local."""
 ```
@@ -172,15 +173,18 @@ non-catalog plans.
 
 ```python
 class MeterUnit(StrEnum):
-    WATT_HOUR = "Wh"       # ESPI uom 72
-    CUBIC_FOOT = "ft3"     # ESPI uom 119
+    WATT_HOUR = "Wh"  # ESPI uom 72
+    CUBIC_FOOT = "ft3"  # ESPI uom 119
 
-def to_billing_units(quantity: Decimal | float, unit: MeterUnit, plan: RatePlan,
-                     *, therms_per_ccf: Decimal = DEFAULT_THERMS_PER_CCF) -> Decimal:
+
+def to_billing_units(
+    quantity: Decimal | float, unit: MeterUnit, plan: RatePlan, *, therms_per_ccf: Decimal = DEFAULT_THERMS_PER_CCF
+) -> Decimal:
     """Convert a meter quantity into the plan's billing unit (kWh or therm).
 
     Raises ValueError for a unit/commodity mismatch (e.g. ft3 on an electric plan).
     """
+
 
 DEFAULT_THERMS_PER_CCF: Decimal = Decimal("1.036")  # EIA South Carolina average heat content; see open question Q1
 ```
@@ -199,35 +203,45 @@ Parser changes:
 @dataclass(frozen=True, slots=True)
 class RateQuote:
     """The price in force at one moment."""
-    plan: RatePlan                 # the tariff period actually used
-    price_per_unit: Decimal        # $/kWh or $/therm
+
+    plan: RatePlan  # the tariff period actually used
+    price_per_unit: Decimal  # $/kWh or $/therm
     usage_unit: UsageUnit
-    season: Season | None          # None for plans with no seasonal charge
-    period: str | None             # TOU period name, e.g. "on_peak"
-    tier: str | None               # UsageTier.name
+    season: Season | None  # None for plans with no seasonal charge
+    period: str | None  # TOU period name, e.g. "on_peak"
+    tier: str | None  # UsageTier.name
     tier_upper_bound: Decimal | None
-    unpriced_charges: tuple[str, ...] = ()   # e.g. ("On-Peak Billing Demand",)
+    unpriced_charges: tuple[str, ...] = ()  # e.g. ("On-Peak Billing Demand",)
+
 
 @dataclass(frozen=True, slots=True)
 class UsageCost:
     """The cost of one quantity of usage."""
-    amount: Decimal                # dollars
-    quantity: Decimal              # in the plan's billing unit, after conversion
+
+    amount: Decimal  # dollars
+    quantity: Decimal  # in the plan's billing unit, after conversion
     plan: RatePlan
     season: Season | None
     period: str | None
-    tiers: tuple[str, ...]         # every tier the quantity touched, in order
+    tiers: tuple[str, ...]  # every tier the quantity touched, in order
     unpriced_charges: tuple[str, ...] = ()
 
-def rate_at(plan: RatePlan, when: datetime,
-            cycle_usage: Decimal | float | None = None) -> RateQuote | None:
+
+def rate_at(plan: RatePlan, when: datetime, cycle_usage: Decimal | float | None = None) -> RateQuote | None:
     """Price per billing unit at *when*. ``cycle_usage`` (billing units, cycle-to-date)
     picks the tier for tiered plans; ``None`` reports the first tier.
     Returns None when no tariff period is in effect."""
 
-def price_usage(plan: RatePlan, when: datetime, quantity: Decimal | float, unit: MeterUnit,
-                *, cycle_usage_before: Decimal | float = 0,
-                therms_per_ccf: Decimal = DEFAULT_THERMS_PER_CCF) -> UsageCost | None:
+
+def price_usage(
+    plan: RatePlan,
+    when: datetime,
+    quantity: Decimal | float,
+    unit: MeterUnit,
+    *,
+    cycle_usage_before: Decimal | float = 0,
+    therms_per_ccf: Decimal = DEFAULT_THERMS_PER_CCF,
+) -> UsageCost | None:
     """Cost of *quantity* (meter units) starting at *when*.
     ``cycle_usage_before`` is cycle-to-date usage in the same meter unit, before this interval.
     Returns None when no tariff period is in effect."""
@@ -283,8 +297,9 @@ class UsagePricer:
     """Prices a chronological stream of interval reads, resetting cycle-to-date usage at
     each billing-cycle boundary (only matters for tiered plans)."""
 
-    def __init__(self, plan: RatePlan, cycles: Sequence[BillingCycle] = (),
-                 *, therms_per_ccf: Decimal = DEFAULT_THERMS_PER_CCF) -> None: ...
+    def __init__(
+        self, plan: RatePlan, cycles: Sequence[BillingCycle] = (), *, therms_per_ccf: Decimal = DEFAULT_THERMS_PER_CCF
+    ) -> None: ...
 
     def observe(self, when: datetime, quantity: Decimal | float, unit: MeterUnit) -> None:
         """Count usage toward the cycle total without pricing it (already-recorded hours,
@@ -385,13 +400,16 @@ side gets its own result and the two net together:
 ```python
 @dataclass(frozen=True, slots=True)
 class NetUsageCost:
-    usage: UsageCost        # cost of the energy used
-    generation: UsageCost   # credit for the energy generated (negative amount and quantity)
-    amount: Decimal         # usage.amount + generation.amount
-    quantity: Decimal       # net, in the billing unit
+    usage: UsageCost  # cost of the energy used
+    generation: UsageCost  # credit for the energy generated (negative amount and quantity)
+    amount: Decimal  # usage.amount + generation.amount
+    quantity: Decimal  # net, in the billing unit
 
-def price_net_usage(plan, when, used, generated, unit, *, cycle_usage_before=0,
-                    therms_per_ccf=DEFAULT_THERMS_PER_CCF) -> NetUsageCost | None: ...
+
+def price_net_usage(
+    plan, when, used, generated, unit, *, cycle_usage_before=0, therms_per_ccf=DEFAULT_THERMS_PER_CCF
+) -> NetUsageCost | None: ...
+
 
 class UsagePricer:
     def price_net(self, when, used, generated, unit) -> NetUsageCost | None:
