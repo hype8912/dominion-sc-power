@@ -15,6 +15,8 @@ This library is used by the custom [Home Assistant Integration for Dominion Ener
 - Support for multiple energy sources (electric and gas)
 - Declarative residential rate plan catalog, including superseded tariff periods
   for pricing historical usage
+- Time-of-use price lookup (`get_time_of_use_rate()`) for Rates 5 and 7, including
+  weekday and holiday rules
 
 ## Supported Rate Plans
 

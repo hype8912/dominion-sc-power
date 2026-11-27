@@ -116,10 +116,12 @@ other generated build artifacts.
 
 ## CI and Publishing
 
-GitHub Actions currently installs dependencies with pip, while local
-contributors should use uv. The CI workflows are the authoritative checks:
+The CI workflows are the authoritative checks. They do not use uv: the test
+and publish jobs install with pip, and the lint job runs Ruff through
+`astral-sh/ruff-action`. Local contributors should use uv.
 
-- `.github/workflows/lint.yml` runs Ruff lint and format checks.
+- `.github/workflows/lint.yml` runs Ruff lint and format checks
+  (`ruff check` and `ruff format --check`) with `astral-sh/ruff-action`.
 - `.github/workflows/test.yaml` runs pytest with coverage on Python 3.14.
 - `.github/workflows/python-publish.yaml` builds and publishes releases.
 

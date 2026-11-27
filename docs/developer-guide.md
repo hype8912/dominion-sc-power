@@ -86,7 +86,8 @@ dominion-sc-power/
 │   ├── test_account.py
 │   ├── test_transport.py
 │   ├── test_exceptions_coverage.py
-│   └── test_main_coverage.py
+│   ├── test_main_coverage.py
+│   └── test_public_api.py
 │
 ├── docs/
 │   ├── developer-guide.md  # This file
@@ -369,7 +370,9 @@ Declarative, hard-coded definitions of all current Dominion Energy SC residentia
 
 ### `models/rate_plan.py` — Rate plan type system
 
-Defines all the dataclasses and enums that compose a `RatePlan`. All types are frozen (`frozen=True`) and slotted (`slots=True`). The `Charge` type alias is a discriminated union of the six concrete charge types, keyed on the `kind` literal field:
+Defines all the dataclasses and enums that compose a `RatePlan`. All types are frozen (`frozen=True`) and slotted (`slots=True`). The `Charge` type alias is a discriminated union of the six concrete charge types, keyed on the `kind` literal field. Keep it a runtime union (`X | Y`), not a PEP 695 `type` alias, because `isinstance()` rejects `TypeAliasType`.
+
+Keep the types used in dataclass field annotations as real imports, not under `if TYPE_CHECKING:`. Python 3.14 evaluates annotations lazily, so a type-only import still lets the module load but makes `typing.get_type_hints()` raise `NameError`. Ruff's `runtime-evaluated-decorators` setting in `pyproject.toml` stops it from moving these imports, and `tests/test_public_api.py` checks every exported dataclass.
 
 ```
 RatePlan
@@ -444,6 +447,7 @@ uv run pytest --cov=dominionsc --cov-report=term-missing
 | `test_transport.py` | `cache_buster()` | Pure assertions |
 | `test_exceptions_coverage.py` | Exception `__str__` formatting | Pure assertions |
 | `test_main_coverage.py` | `python -m dominionsc` entry point | Mock |
+| `test_public_api.py` | `typing.get_type_hints()` resolves on every exported dataclass; `isinstance()` works with the `Charge` union | Runtime introspection |
 
 ### Test fixtures
 
