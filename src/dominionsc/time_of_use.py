@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -11,7 +12,6 @@ from .models.rate_plan import Season, TimeOfUseCharge
 
 if TYPE_CHECKING:
     from datetime import date, datetime, time
-    from decimal import Decimal
 
     from .models.rate_plan import RatePlan, TimeOfUsePeriod, TimeWindow
 

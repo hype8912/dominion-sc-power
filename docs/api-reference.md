@@ -17,6 +17,7 @@ This document covers the complete public API of the `dominionsc` package. Everyt
    - [RatePlan and related types](#rateplan-and-related-types)
    - [Rate plan catalog](#rate-plan-catalog)
    - [Catalog lookup functions](#catalog-lookup-functions)
+   - [Time-of-use rate lookup](#time-of-use-rate-lookup)
 6. [Utilities](#utilities)
 
 ---
@@ -719,8 +720,8 @@ boundaries are inclusive: a plan applies from `effective_from` through
 `effective_to`, and a plan with `effective_to=None` applies from `effective_from`
 onward. Returns `None` when the code is unknown or the date falls before the
 earliest recorded period (or in a gap between periods). For example,
-`get_rate_plan_for_date("rate_2", date(2025, 8, 1))` is `None` because `rate_2`
-has no recorded period before July 1, 2026.
+`get_rate_plan_for_date("rate_2", date(2025, 7, 1))` is `None` because `rate_2`'s
+earliest recorded period starts on July 23, 2025.
 
 ### Time-of-use rate lookup
 

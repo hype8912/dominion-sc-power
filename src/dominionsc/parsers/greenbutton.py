@@ -98,7 +98,7 @@ def _extract_power_of_ten_multiplier(entry: dict[str, Any]) -> int | None:
         return None
     try:
         return int(raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

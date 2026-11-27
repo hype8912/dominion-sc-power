@@ -17,12 +17,14 @@ path; unifying it requires updating those tests and is deferred.
 """
 
 import time
-from collections.abc import Callable, Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
 from .exceptions import CannotConnect
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 
 def cache_buster() -> str:

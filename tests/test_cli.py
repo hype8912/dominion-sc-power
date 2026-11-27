@@ -5,10 +5,10 @@ by mocking async_login, async_get_accounts, and async_get_usage_reads.
 See docs/REFACTOR_PLAN.md Phase 5.
 """
 
-import argparse
 import csv
 import json
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,6 +17,9 @@ from dominionsc.cli import build_parser, main, run
 from dominionsc.exceptions import InvalidAuth, MfaChallenge
 from dominionsc.models.register_reads import RegisterReads
 from dominionsc.usage_read import UsageRead
+
+if TYPE_CHECKING:
+    import argparse
 
 # ---------------------------------------------------------------------------
 # build_parser() tests

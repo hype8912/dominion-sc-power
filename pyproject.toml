@@ -1,13 +1,22 @@
 [project]
 name = "dominion-sc-power"
-version = "0.2.0"
+version = "0.3.0"
 license = "Apache-2.0"
 authors = [
     { name="sctigercat1" },
 ]
 description = "Async library for accessing Dominion Energy SC API"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
+classifiers = [
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
 dependencies = [
     "aiohttp>=3.14.4",
     "tzdata>=2026.3",
@@ -34,7 +43,7 @@ build-backend = "setuptools.build_meta"
 dominionsc = ["py.typed"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py314"
 line-length = 127
 exclude = [
     ".git", ".mypy_cache", ".ruff_cache", ".venv", "__pypackages__",
@@ -89,6 +98,10 @@ fixable = ["ALL"]
     "E501",
 ]
 
+[tool.ruff.lint.flake8-type-checking]
+# Dataclass annotations are read at runtime (typing.get_type_hints, serializers), so keep their imports real.
+runtime-evaluated-decorators = ["dataclasses.dataclass"]
+
 [tool.ruff.lint.mccabe]
 max-complexity = 25
 
@@ -112,7 +125,7 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 exclude = [".venv", "venv", "build"]
 pretty = true
 strict = true

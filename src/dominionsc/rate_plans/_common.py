@@ -113,7 +113,7 @@ def time_of_use_charge(
 
     """
     excluded_holidays = ON_PEAK_EXCLUDED_HOLIDAYS if on_peak_weekdays_only else ()
-    midday = (TimeWindow(time(12), time(15)),) if winter_midday_super_off_peak else ()
+    midday: tuple[TimeWindow] | tuple[()] = (TimeWindow(time(12), time(15)),) if winter_midday_super_off_peak else ()
     return TimeOfUseCharge(
         name="Energy",
         periods_by_season=MappingProxyType(

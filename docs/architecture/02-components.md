@@ -21,6 +21,7 @@ src/dominionsc/
   usage_read.py        # backward-compatible re-export of models.usage_read.UsageRead
   rates.py             # public rate plan entry point: assembles the plans, mappings, history, and lookups
   rate_plans/          # one module per plan (rate_1.py ... rate_32v.py) plus _common.py for shared values
+  time_of_use.py       # get_time_of_use_rate(), TimeOfUseRate, season_for()
   __main__.py          # entry point delegating to cli.main()
 
   models/
@@ -60,6 +61,7 @@ flowchart LR
         UsageReadMod["usage_read.py"]
         Rates["rates.py"]
         RatePlans["rate_plans/"]
+        TOU["time_of_use.py"]
         Main["__main__.py"]
     end
 
@@ -109,8 +111,11 @@ flowchart LR
     Parsers --> Exceptions
     CLI --> Init
     Main --> CLI
+    Init --> TOU
     Rates --> RatePlans
     RatePlans --> M_RatePlan
+    TOU --> M_RatePlan
+    TOU --> Config
 ```
 
 ## Component Responsibilities
@@ -131,4 +136,5 @@ flowchart LR
 | `models/` | Dataclasses | Structured output (`AccountInfo`, `RegisterReads`, `UsageRead`, `Forecast`, `RatePlan`) |
 | `rates.py` | `RATE_1`...`RATE_8`, `RATE_32S`, `RATE_32V`, `RATE_1_2025`, `RATE_2_2025`, `RATE_5_2024`, `RATE_5_2025`, `RATE_6_2025`, `RATE_7_2025`, `RATE_8_2025`, `RATE_32S_2025`, `RATE_32V_2025`, `RATE_PLAN_HISTORY`, `get_rate_plan()`, `get_rate_plan_history()`, `get_rate_plan_for_date()` | Public entry point: assembles the per-plan modules into the catalog mappings, `RATE_PLAN_HISTORY`, and lookup functions; no network calls |
 | `rate_plans/` | `rate_1.py` ... `rate_32v.py`, `_common.py` | Declarative, hard-coded definition of each residential plan (current values, archived periods, and a `HISTORY` tuple), with shared values in `_common.py` |
+| `time_of_use.py` | `get_time_of_use_rate()`, `TimeOfUseRate`, `season_for()` | Prices one moment under a plan's `TimeOfUseCharge`: picks the season by calendar month, then the matching period by local clock time, weekday and holiday rules, falling back to the `fallback` period; no network calls |
 | `models/rate_plan.py` | `RatePlan`, `Charge` union | Discriminated-union type system (`DailyCharge`, `TieredUsageCharge`, `TimeOfUseCharge`, `DemandCharge`, etc.) backing the rate catalog |

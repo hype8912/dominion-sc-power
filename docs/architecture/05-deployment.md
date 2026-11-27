@@ -13,7 +13,7 @@
 ```mermaid
 flowchart LR
     subgraph CI["GitHub Actions (.github/workflows/)"]
-        Lint["lint.yml (ruff)"]
+        Lint["lint.yml (ruff-action)"]
         Test["test.yaml (pytest + coverage)"]
         Publish["python-publish.yaml"]
     end
@@ -63,7 +63,7 @@ flowchart TB
 
 - `tests/` directory present; `pytest` (with `pytest-asyncio` in `auto` mode) is used, with fixtures in `tests/fixtures/`.
 - Coverage is reported through `pytest-cov`; the HTML report is written to `htmlcov/`, which is not committed.
-- `test.yaml` runs on push and pull request, on Python 3.13.
-- `lint.yml` runs `ruff` (lint and format check) on push and pull request, on Python 3.11.
+- `test.yaml` runs on push and pull request, on Python 3.14.
+- `lint.yml` runs `ruff check` and `ruff format --check` on push and pull request through `astral-sh/ruff-action`, which installs Ruff itself (no Python setup or package install).
 - `python-publish.yaml` builds the distributions and publishes them to PyPI when a GitHub release is published.
-- CI installs dependencies with pip; local development uses uv.
+- The test and publish jobs install with pip; local development uses uv.

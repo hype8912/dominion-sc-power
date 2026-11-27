@@ -9,7 +9,7 @@
 
 ## Scope & Boundaries
 
-- **In scope:** Async `aiohttp` client; login + TFA; usage/cost retrieval by register (`ESPI UsagePoint`); forecast model; CSV/CLI output; net-metered (multi-register) solar accounts; a declarative residential rate plan catalog with superseded tariff periods (`rates.py` and `rate_plans/`).
+- **In scope:** Async `aiohttp` client; login + TFA; usage/cost retrieval by register (`ESPI UsagePoint`); forecast model; CSV/CLI output; net-metered (multi-register) solar accounts; a declarative residential rate plan catalog with superseded tariff periods (`rates.py` and `rate_plans/`); time-of-use price lookup for a given moment (`time_of_use.py`).
 - **Explicit limits (from README):** One service address per account; TFA required; data delayed 24–48 hours.
 
 ## High-Level Component Diagram
@@ -34,6 +34,7 @@ flowchart TB
         Config["config.py / const.py"]
         Rates["rates.py — rate plan catalog, history, lookups"]
         RatePlans["rate_plans/ — one module per plan"]
+        TOU["time_of_use.py — price a moment under a TOU plan"]
     end
 
     CLI --> Client
@@ -50,6 +51,8 @@ flowchart TB
     Parsers --> Models
     Rates --> RatePlans
     RatePlans --> Models
+    TOU --> Models
+    TOU --> Config
 
     Transport --> Dominion_API
     Transport --> Bidgely_API
@@ -70,4 +73,4 @@ flowchart TB
 
 ## Technology Stack
 
-- Python 3.11+; `aiohttp`; `xmltodict`; `tzdata`; `uv`/`pyproject.toml` (setuptools build backend); `pytest`; `ruff`; GitHub Actions (`lint.yml`, `test.yaml`, `python-publish.yaml`).
+- Python 3.14+; `aiohttp`; `xmltodict`; `tzdata`; `uv`/`pyproject.toml` (setuptools build backend); `pytest`; `ruff`; GitHub Actions (`lint.yml`, `test.yaml`, `python-publish.yaml`).

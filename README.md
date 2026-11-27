@@ -15,6 +15,8 @@ This library is used by the custom [Home Assistant Integration for Dominion Ener
 - Support for multiple energy sources (electric and gas)
 - Declarative residential rate plan catalog, including superseded tariff periods
   for pricing historical usage
+- Time-of-use price lookup (`get_time_of_use_rate()`) for Rates 5 and 7, including
+  weekday and holiday rules
 
 ## Supported Rate Plans
 
@@ -66,7 +68,7 @@ Superseded periods are available through `get_rate_plan_history()` and
 
 ## Installation
 
-Requires Python 3.11 or higher.
+Requires Python 3.14 or higher.
 
 ```bash
 pip install dominion-sc-power

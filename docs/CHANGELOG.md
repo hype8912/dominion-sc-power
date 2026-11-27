@@ -52,6 +52,11 @@ bumped for a release.
 
 ### Changed
 
+- **Breaking:** Python 3.14 or newer is now required (was 3.11). Python 3.11-3.13 can no longer install or import
+  the package. The package version is now 0.3.0.
+- Ruff and mypy now target Python 3.14, and the CI test and publish jobs run on Python 3.14.
+- The CI lint workflow now runs Ruff through `astral-sh/ruff-action` instead of installing the package with pip.
+- Added PyPI classifiers, including `Programming Language :: Python :: 3.14` and `Typing :: Typed`.
 - Each rate plan now sets its own `effective_from` (there is no longer a shared effective date), since
   tariffs can change independently.
 - Rate plan definitions moved out of `rates.py` into one module per plan under
@@ -61,6 +66,9 @@ bumped for a release.
 
 ### Fixed
 
+- `typing.get_type_hints()` now works on every exported dataclass. `RatePlan`, `TimeOfUseRate`, `TimeWindow`,
+  `TieredUsageCharge`, `TimeOfUseCharge` and `EligibilityRule` previously raised `NameError` because their field
+  types were imported only for type checking.
 - **Rate 5 and Rate 7 time-of-use windows before July 2026.** `RATE_5_2024`, `RATE_5_2025` and `RATE_7_2025` now
   limit on-peak to Monday-Friday excluding the six tariff holidays, and define super-off-peak as 1-5 AM only
   (no winter 12-3 PM window), as those tariffs state. The July 2026 plans (`RATE_5`, `RATE_7`) keep on-peak every

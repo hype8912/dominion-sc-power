@@ -11,7 +11,10 @@ Unlike the pre-refactor code, these functions always return a fresh
 dict rather than mutating and reusing one across calls (finding F8).
 """
 
-from .config import UtilityConfig
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import UtilityConfig
 
 
 def user_agent_only(config: UtilityConfig) -> dict[str, str]:

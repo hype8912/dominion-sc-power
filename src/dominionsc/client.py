@@ -10,9 +10,8 @@ import json
 import logging
 import zoneinfo
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import aiohttp
 from aiohttp.client_exceptions import ClientError
 
 from . import headers as _headers
@@ -21,11 +20,15 @@ from .auth import LoginFlow, find_verification_token
 from .config import UtilityConfig
 from .exceptions import ApiException, CannotConnect, InvalidAuth
 from .models.forecast import Forecast
-from .models.register_reads import RegisterReads
-from .models.usage_read import UsageRead
 from .parsers.forecast import parse_forecast
 from .parsers.greenbutton import parse_registers, parse_usage_reads
 from .transport import DominionSCURLHandler
+
+if TYPE_CHECKING:
+    import aiohttp
+
+    from .models.register_reads import RegisterReads
+    from .models.usage_read import UsageRead
 
 _LOGGER = logging.getLogger(__file__)
 
