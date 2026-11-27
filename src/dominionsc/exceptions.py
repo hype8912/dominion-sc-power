@@ -52,7 +52,7 @@ class MfaChallenge(Exception):
     Catch it and use ``handler`` to finish TFA, then retry ``async_login``.
     """
 
-    def __init__(self, message: str, handler: "DominionSCTFAHandler") -> None:
+    def __init__(self, message: str, handler: DominionSCTFAHandler) -> None:
         """Initialize the exception.
 
         Args:

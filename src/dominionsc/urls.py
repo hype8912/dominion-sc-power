@@ -7,8 +7,12 @@ docs/REFACTOR_PLAN.md finding F3 for the full endpoint inventory this
 was extracted from.
 """
 
-from .config import UtilityConfig
+from typing import TYPE_CHECKING
+
 from .transport import cache_buster
+
+if TYPE_CHECKING:
+    from .config import UtilityConfig
 
 
 def login_page_url(config: UtilityConfig) -> str:

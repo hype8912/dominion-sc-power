@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import calendar
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import date, time, timedelta
 from datetime import date as _date
-from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
-from typing import TYPE_CHECKING, Literal, TypeAlias
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-    from datetime import date, time
+from typing import Literal, TypeAlias
 
 
 class Commodity(StrEnum):
@@ -289,7 +286,8 @@ class DemandCharge:
     rolling_interval: bool = True
 
 
-Charge: TypeAlias = DailyCharge | MonthlyCharge | FlatUsageCharge | TieredUsageCharge | TimeOfUseCharge | DemandCharge
+# Keep this a runtime union, not a PEP 695 ``type`` alias: ``isinstance()`` rejects ``TypeAliasType``.
+Charge: TypeAlias = DailyCharge | MonthlyCharge | FlatUsageCharge | TieredUsageCharge | TimeOfUseCharge | DemandCharge  # noqa: UP040
 """Union of all concrete charge types that can appear in a ``RatePlan``.
 
 Use this alias with ``isinstance()`` or ``match/case`` to dispatch on

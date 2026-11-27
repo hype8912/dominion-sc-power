@@ -70,4 +70,4 @@ flowchart TB
 
 ## Technology Stack
 
-- Python 3.11+; `aiohttp`; `xmltodict`; `tzdata`; `uv`/`pyproject.toml` (setuptools build backend); `pytest`; `ruff`; GitHub Actions (`lint.yml`, `test.yaml`, `python-publish.yaml`).
+- Python 3.14+; `aiohttp`; `xmltodict`; `tzdata`; `uv`/`pyproject.toml` (setuptools build backend); `pytest`; `ruff`; GitHub Actions (`lint.yml`, `test.yaml`, `python-publish.yaml`).

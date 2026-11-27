@@ -120,7 +120,7 @@ async def _handle_mfa(
         try:
             choice_index: int = int(input("Enter the number for your choice: ")) - 1
             choice_key: str = list(options.keys())[choice_index]
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             print("Invalid selection.")
             return False
         await handler.async_select_tfa_option(choice_key)
@@ -165,7 +165,7 @@ async def run(args: argparse.Namespace) -> int:
         try:
             with open(args.login_data_file) as file:
                 login_data = json.load(file)
-        except (FileNotFoundError, json.JSONDecodeError):
+        except FileNotFoundError, json.JSONDecodeError:
             # A missing or corrupt file just means no cached token: log in with
             # interactive TFA and overwrite the file afterwards.
             pass

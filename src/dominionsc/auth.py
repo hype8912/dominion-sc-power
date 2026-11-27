@@ -8,9 +8,7 @@ without touching usage/forecast parsing (see docs/REFACTOR_PLAN.md Phase 2).
 import json
 import logging
 import re
-from typing import Any
-
-import aiohttp
+from typing import TYPE_CHECKING, Any
 
 from . import headers as _headers
 from . import urls as _urls
@@ -18,6 +16,9 @@ from .config import UtilityConfig
 from .exceptions import ApiException, CannotConnect, InvalidAuth, MfaChallenge
 from .models.account import AccountInfo
 from .transport import DominionSCURLHandler
+
+if TYPE_CHECKING:
+    import aiohttp
 
 _LOGGER = logging.getLogger(__file__)
 

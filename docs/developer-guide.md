@@ -121,7 +121,7 @@ Do not add new code to these shims. New code belongs in the appropriate module.
 
 ## Setting up the development environment
 
-This project uses [uv](https://docs.astral.sh/uv/) for dependency management. Install Python 3.11+ and uv before starting.
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management. Install Python 3.14+ and uv before starting.
 
 ```bash
 # Clone the repository

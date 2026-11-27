@@ -66,7 +66,7 @@ Superseded periods are available through `get_rate_plan_history()` and
 
 ## Installation
 
-Requires Python 3.11 or higher.
+Requires Python 3.14 or higher.
 
 ```bash
 pip install dominion-sc-power

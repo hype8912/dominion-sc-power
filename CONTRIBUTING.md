@@ -8,7 +8,7 @@ This project uses **[uv](https://docs.astral.sh/uv/)** as the package manager fo
 
 ### Prerequisites
 
-- Python 3.11 or higher
+- Python 3.14 or higher
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) installed
 
 ### Quick Start
@@ -120,7 +120,7 @@ GitHub Actions currently installs dependencies with pip, while local
 contributors should use uv. The CI workflows are the authoritative checks:
 
 - `.github/workflows/lint.yml` runs Ruff lint and format checks.
-- `.github/workflows/test.yaml` runs pytest with coverage on Python 3.13.
+- `.github/workflows/test.yaml` runs pytest with coverage on Python 3.14.
 - `.github/workflows/python-publish.yaml` builds and publishes releases.
 
 A release is published by GitHub Actions when a GitHub release is created.
