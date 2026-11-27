@@ -17,10 +17,11 @@ DEFAULT_THERMS_PER_CCF: Decimal = Decimal("1.036")
 """Therms per hundred cubic feet (CCF) of gas used when no other factor is given.
 
 Dominion bills gas in therms while the meter reports cubic feet. Its Gas General Terms and Conditions
-(section III.B) convert by the weighted average heat content (BTU per cubic foot) of the gas entering its system
-over the days of the customer's billing cycle, divided by 1,000. So the true factor is that average BTU / 1,000
-therms per CCF. It changes every billing cycle, is not in the tariff or in the Green Button feed, and is normally
-within 0.95 to 1.40 (the tariff's stated range of 950 to 1,400 BTU per cubic foot).
+(section III.B; copy in ``docs/reference/``) convert by the weighted average heat content (BTU per cubic foot)
+of the gas entering its system over the days of the customer's billing cycle, divided by 1,000. So the true
+factor is that average BTU / 1,000 therms per CCF. It changes every billing cycle, is not in the tariff or in
+the Green Button feed, and is normally within 0.95 to 1.40 (the tariff's stated range of 950 to 1,400 BTU per
+cubic foot).
 
 The default, ``1.036``, is an estimate: the average heat content of natural gas delivered to South Carolina
 consumers over September 2024 to August 2026 was 1,036 BTU per cubic foot (U.S. Energy Information Administration

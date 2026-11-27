@@ -610,7 +610,8 @@ For reference, so the library API is shaped around what the integration actually
   per tariff change. Resolve it if a bill for such a cycle becomes available.
 - **Q3 — What "no data yet" looks like.** *Answered (2026-11-27):* missing from the feed, not zero-valued. See §4.8.
 - **Source for gas billing rules:** Dominion Energy South Carolina, *Gas General Terms and Conditions*, effective on
-  and after the first billing cycle of October 2023 (Order No. 2023-737(A)). It defines a billing month as the period
+  and after the first billing cycle of October 2023 (Order No. 2023-737(A)); copy at
+  `docs/reference/general-terms-and-conditions-gas.pdf`. It defines a billing month as the period
   between two regular meter readings of 28 to 34 days (section I.B), which confirms that "month" in the rate
   schedules means billing cycle and that cycle length varies. It states rates are "on a monthly basis". An estimated
   bill uses the preceding 60 days' average use and is corrected at the next actual read (IV.A). It also sets a
