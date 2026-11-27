@@ -22,6 +22,10 @@ src/dominionsc/
   rates.py             # public rate plan entry point: assembles the plans, mappings, history, and lookups
   rate_plans/          # one module per plan (rate_1.py ... rate_32v.py) plus _common.py for shared values
   time_of_use.py       # get_time_of_use_rate(), TimeOfUseRate, season_for()
+  local_time.py        # UTILITY_TIMEZONE, utility_local_date(), to_utility_local()
+  units.py             # to_billing_units(), DEFAULT_THERMS_PER_CCF (re-exports MeterUnit)
+  pricing.py           # price_usage(), rate_at(), price_net_usage(), RateQuote, UsageCost, NetUsageCost
+  billing.py           # BillingCycle, estimate_billing_cycles(), find_billing_cycle(), fixed_charges(), UsagePricer
   __main__.py          # entry point delegating to cli.main()
 
   models/
@@ -30,6 +34,7 @@ src/dominionsc/
     register_reads.py  # Per-register read model
     usage_read.py      # Usage read model
     rate_plan.py       # RatePlan type system (discriminated Charge union)
+    units.py           # MeterUnit (Wh, ft³)
     __init__.py
 
   parsers/
@@ -62,6 +67,10 @@ flowchart LR
         Rates["rates.py"]
         RatePlans["rate_plans/"]
         TOU["time_of_use.py"]
+        LocalTime["local_time.py"]
+        Units["units.py"]
+        Pricing["pricing.py"]
+        Billing["billing.py"]
         Main["__main__.py"]
     end
 
@@ -71,6 +80,7 @@ flowchart LR
         M_RegReads["register_reads.py"]
         M_Usage["usage_read.py"]
         M_RatePlan["rate_plan.py"]
+        M_Units["units.py"]
     end
 
     subgraph Parsers["parsers/"]
@@ -115,7 +125,30 @@ flowchart LR
     Rates --> RatePlans
     RatePlans --> M_RatePlan
     TOU --> M_RatePlan
-    TOU --> Config
+    TOU --> LocalTime
+    LocalTime --> Config
+    Rates --> LocalTime
+    Init --> LocalTime
+    Init --> Units
+    Init --> Pricing
+    Init --> Billing
+    Units --> M_RatePlan
+    Units --> M_Units
+    Pricing --> LocalTime
+    Pricing --> M_RatePlan
+    Pricing --> Rates
+    Pricing --> TOU
+    Pricing --> Units
+    Billing --> LocalTime
+    Billing --> M_Forecast
+    Billing --> M_RatePlan
+    Billing --> Pricing
+    Billing --> Rates
+    Billing --> Units
+    M_Usage --> M_Units
+    M_RegReads --> M_Units
+    M_RegReads --> M_Usage
+    P_Green --> M_Units
 ```
 
 ## Component Responsibilities
@@ -131,10 +164,14 @@ flowchart LR
 | `config.py` / `const.py` | `UtilityConfig`, `DEFAULT_CONFIG`, `USER_AGENT`, `BIDGELY_PILOT_ID` | Endpoints, timezone, pilot ID, and User-Agent in one place |
 | `exceptions.py` | `CannotConnect`, `InvalidAuth`, `MfaChallenge`, `ApiException` | Exception hierarchy; `CannotConnect` and `ApiException` carry `url`, `status`, and `response_text` |
 | `helpers.py` | `create_cookie_jar()` | Cookie jar that does not percent-encode Dominion's cookie values |
-| `parsers/greenbutton.py` | `parse_registers()`, `parse_usage_reads()` | Parses ESPI `UsagePoint` XML into register-level reads, applying the feed's `powerOfTenMultiplier` scaling |
+| `parsers/greenbutton.py` | `parse_registers()`, `parse_usage_reads()` | Parses ESPI `UsagePoint` XML into register-level reads, applying the feed's `powerOfTenMultiplier` scaling and setting each read's `unit` from `espi:uom` |
 | `parsers/forecast.py` | `parse_forecast()` | Parses forecast responses into cost/projections |
-| `models/` | Dataclasses | Structured output (`AccountInfo`, `RegisterReads`, `UsageRead`, `Forecast`, `RatePlan`) |
-| `rates.py` | `RATE_1`...`RATE_8`, `RATE_32S`, `RATE_32V`, `RATE_1_2025`, `RATE_2_2025`, `RATE_5_2024`, `RATE_5_2025`, `RATE_6_2025`, `RATE_7_2025`, `RATE_8_2025`, `RATE_32S_2025`, `RATE_32V_2025`, `RATE_PLAN_HISTORY`, `get_rate_plan()`, `get_rate_plan_history()`, `get_rate_plan_for_date()` | Public entry point: assembles the per-plan modules into the catalog mappings, `RATE_PLAN_HISTORY`, and lookup functions; no network calls |
+| `models/` | Dataclasses and enums | Structured output (`AccountInfo`, `RegisterReads`, `UsageRead`, `Forecast`, `RatePlan`, `MeterUnit`) |
+| `rates.py` | `RATE_1`...`RATE_8`, `RATE_32S`, `RATE_32V`, `RATE_1_2025`, `RATE_2_2025`, `RATE_5_2024`, `RATE_5_2025`, `RATE_6_2025`, `RATE_7_2025`, `RATE_8_2025`, `RATE_32S_2025`, `RATE_32V_2025`, `RATE_PLAN_HISTORY`, `get_rate_plan()`, `get_rate_plan_history()`, `get_rate_plan_for_date()`, `resolve_plan_for()` | Public entry point: assembles the per-plan modules into the catalog mappings, `RATE_PLAN_HISTORY`, and lookup functions; no network calls |
 | `rate_plans/` | `rate_1.py` ... `rate_32v.py`, `_common.py` | Declarative, hard-coded definition of each residential plan (current values, archived periods, and a `HISTORY` tuple), with shared values in `_common.py` |
 | `time_of_use.py` | `get_time_of_use_rate()`, `TimeOfUseRate`, `season_for()` | Prices one moment under a plan's `TimeOfUseCharge`: picks the season by calendar month, then the matching period by local clock time, weekday and holiday rules, falling back to the `fallback` period; no network calls |
+| `local_time.py` | `UTILITY_TIMEZONE`, `utility_local_date()`, `to_utility_local()` | The one place timestamps are converted to `America/New_York`; naive values are read as local |
+| `units.py` | `to_billing_units()`, `DEFAULT_THERMS_PER_CCF` | Converts meter quantities to the plan's billing unit (Wh to kWh, ft³ to therms at 1.036 therms per CCF by default); rejects a unit that doesn't match the plan's commodity |
+| `pricing.py` | `price_usage()`, `rate_at()`, `price_net_usage()`, `RateQuote`, `UsageCost`, `NetUsageCost` | Prices usage under a plan: resolves the tariff period, then the season and tier split, the time-of-use period, or the flat price; credits solar generation at the same rate; lists unpriced charges (Rate 7 demand); no network calls |
+| `billing.py` | `BillingCycle`, `estimate_billing_cycles()`, `find_billing_cycle()`, `fixed_charges()`, `UsagePricer` | Estimates billing cycles from the forecast's current cycle; prices a chronological stream of reads, resetting cycle-to-date usage at each cycle; prices a cycle's fixed charges; no network calls |
 | `models/rate_plan.py` | `RatePlan`, `Charge` union | Discriminated-union type system (`DailyCharge`, `TieredUsageCharge`, `TimeOfUseCharge`, `DemandCharge`, etc.) backing the rate catalog |

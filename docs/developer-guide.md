@@ -26,6 +26,8 @@ Dominion Energy South Carolina customers can view their energy usage history and
 2. Exchanging the Dominion session for a Bidgely access token (Bidgely is a third-party energy analytics platform Dominion uses to store metering data).
 3. Downloading metering data as Green Button ESPI XML from Bidgely's API.
 4. Parsing the XML into structured Python objects that callers can work with.
+5. Pricing that usage in dollars under Dominion's residential tariffs (`pricing.py`, `billing.py`), so consumers
+   don't have to know how a rate plan is structured.
 
 The primary consumer of this library is the [ha-dominion-sc](https://github.com/sctigercat1/ha-dominion-sc) Home Assistant integration.
 
@@ -57,12 +59,17 @@ dominion-sc-power/
 │   ├── rates.py            # Public rate plan entry point: assembles the plans, mappings, history, and lookups
 │   ├── rate_plans/         # One module per rate plan (RATE_*, archived periods, HISTORY) plus _common.py
 │   ├── time_of_use.py      # get_time_of_use_rate(), TimeOfUseRate, season_for()
+│   ├── local_time.py       # UTILITY_TIMEZONE, utility_local_date(): the utility's time zone
+│   ├── units.py            # to_billing_units(), DEFAULT_THERMS_PER_CCF
+│   ├── pricing.py          # price_usage(), rate_at(), price_net_usage() and their result types
+│   ├── billing.py          # Billing cycles, fixed_charges(), UsagePricer
 │   │
 │   ├── models/             # Pure data classes (no network, no logic)
 │   │   ├── account.py      # AccountInfo
 │   │   ├── forecast.py     # Forecast
 │   │   ├── usage_read.py   # UsageRead
 │   │   ├── register_reads.py  # RegisterReads
+│   │   ├── units.py        # MeterUnit (Wh, ft³)
 │   │   └── rate_plan.py    # Full rate plan type system
 │   │
 │   └── parsers/            # Pure parsing functions (no network)
@@ -73,12 +80,19 @@ dominion-sc-power/
 │   ├── conftest.py
 │   ├── fixtures/
 │   │   ├── greenbutton_multi_register.xml
-│   │   └── greenbutton_gas_scaled.xml
+│   │   ├── greenbutton_gas_scaled.xml
+│   │   └── greenbutton_gas_recent.xml
+│   ├── legacy/             # Frozen copy of ha-dominion-sc's old pricing, for the equivalence test
 │   ├── test_dominionsc.py
 │   ├── test_parsers.py
 │   ├── test_cli.py
 │   ├── test_rates.py
 │   ├── test_time_of_use.py
+│   ├── test_local_time.py
+│   ├── test_units.py
+│   ├── test_pricing.py
+│   ├── test_billing.py
+│   ├── test_data_availability.py
 │   ├── test_helpers.py
 │   ├── test_headers.py
 │   ├── test_urls.py
@@ -96,6 +110,8 @@ dominion-sc-power/
 │   ├── troubleshooting.md  # Common errors and solutions
 │   ├── CHANGELOG.md
 │   ├── REFACTOR_PLAN.md    # Historical record of the modularization refactor
+│   ├── PRICING_API_PLAN.md # Design, decisions and open questions for the pricing API
+│   ├── reference/          # Copies of the Dominion tariff documents the billing rules cite
 │   └── architecture/       # Mermaid architecture diagrams
 │
 ├── .github/workflows/      # CI: lint.yml, test.yaml, python-publish.yaml
@@ -234,11 +250,17 @@ The Green Button ESPI XML has this general shape:
 
 The parser:
 1. Converts the XML to a dict using `xmltodict`.
-2. Determines the scale factor for the whole feed from the `powerOfTenMultiplier` declared on the `ReadingType` entries (`10 ** multiplier`; no multiplier means 1). Dominion's gas feed reports cubic feet with a multiplier of `-3`, so raw values are thousandths of a cubic foot and must be scaled. Electric feeds declare no multiplier. If a feed declares more than one distinct multiplier, no scaling is applied and a warning is logged.
-3. Filters entries to those whose title starts with `"Interval Consumption"`.
-4. Extracts the UsagePoint ID from the `<link href>` path using a regex.
-5. Groups all entries by UsagePoint ID into `RegisterReads` objects.
-6. Decodes each `espi:start` as a UTC datetime and then attaches the utility's timezone without converting, because Bidgely encodes local wall-clock time in that field (a reading at 00:00 Eastern is sent as the epoch for 00:00 UTC). It then multiplies each raw value by the scale factor.
+2. Determines the unit for the whole feed from the `espi:uom` declared on the `ReadingType` entries: `72` is
+   `MeterUnit.WATT_HOUR` and `119` is `MeterUnit.CUBIC_FOOT`. No `uom` gives `None` quietly; an unknown code, or
+   more than one distinct code, gives `None` and logs one warning for the feed.
+3. Determines the scale factor for the whole feed from the `powerOfTenMultiplier` declared on the `ReadingType` entries (`10 ** multiplier`; no multiplier means 1). Dominion's gas feed reports cubic feet with a multiplier of `-3`, so raw values are thousandths of a cubic foot and must be scaled. Electric feeds declare no multiplier. If a feed declares more than one distinct multiplier, no scaling is applied and a warning is logged.
+4. Filters entries to those whose title starts with `"Interval Consumption"`.
+5. Extracts the UsagePoint ID from the `<link href>` path using a regex.
+6. Groups all entries by UsagePoint ID into `RegisterReads` objects, each carrying the feed's unit.
+7. Decodes each `espi:start` as a UTC datetime and then attaches the utility's timezone without converting, because Bidgely encodes local wall-clock time in that field (a reading at 00:00 Eastern is sent as the epoch for 00:00 UTC). It then multiplies each raw value by the scale factor and sets the read's `unit`.
+
+Days whose data isn't available yet are simply absent from the feed; the parser never sees zero-filled placeholder
+days. A day of all-zero readings is real data (for example a gas account with no usage).
 
 The `_ensure_list()` helper normalizes `xmltodict`'s behavior: it returns a `dict` when there is only one child element, but a `list` when there are multiple. Calling `_ensure_list()` makes callers work correctly in both cases.
 
@@ -313,8 +335,8 @@ All pure data with no business logic.
 
 | Model | Key fields |
 |-------|-----------|
-| `UsageRead` | `start_time`, `end_time`, `consumption` (Wh or ft³) |
-| `RegisterReads` | `usage_point_id`, `flow_direction`, `reads: list[UsageRead]` |
+| `UsageRead` | `start_time`, `end_time`, `consumption` (Wh or ft³), `unit: MeterUnit \| None` |
+| `RegisterReads` | `usage_point_id`, `flow_direction`, `reads: list[UsageRead]`, `unit: MeterUnit \| None` |
 | `Forecast` | `start_date`, `end_date`, `cost_to_date`, `forecasted_cost`, `typical_cost: float \| None` |
 | `AccountInfo` | `measurement_types`, `service_address_and_account_no`; `to_legacy_list()` |
 
@@ -322,7 +344,7 @@ All pure data with no business logic.
 
 | Model | Role |
 |-------|------|
-| `RatePlan` | Top-level tariff definition |
+| `RatePlan` | Top-level tariff definition; `closed_to_new_customers` property |
 | `DailyCharge` | Fixed $/day charge component |
 | `MonthlyCharge` | Fixed $/billing-cycle charge component |
 | `FlatUsageCharge` | Uniform $/unit charge component |
@@ -337,6 +359,7 @@ All pure data with no business logic.
 | `Commodity` | `ELECTRICITY` / `GAS` enum |
 | `UsageUnit` | `KWH` / `THERM` enum |
 | `Season` | `SUMMER` / `WINTER` enum |
+| `MeterUnit` (`models/units.py`) | `WATT_HOUR` / `CUBIC_FOOT` enum: the unit a reading is in |
 
 ### `rates.py` and `rate_plans/` — Rate plan catalog
 
@@ -404,7 +427,23 @@ Separated from `__main__.py` so it can be imported and tested without running ar
 
 ### `time_of_use.py` — Time-of-use rate lookup
 
-`get_time_of_use_rate(plan, when)` prices one moment against a plan's `TimeOfUseCharge`. It converts `when` to `America/New_York` (naive values are taken as already local), checks the date is inside the plan's effective dates, picks the season with `season_for()` (calendar month), and returns the first period whose `applies_on(day)` is true and whose window contains the local clock time, falling back to the `fallback=True` period. Windows are half-open and may cross midnight. It does not look up the plan itself: callers pass the period in force, usually from `get_rate_plan_for_date()`.
+`get_time_of_use_rate(plan, when)` prices one moment against a plan's `TimeOfUseCharge`. It converts `when` to `America/New_York` (naive values are taken as already local), checks the date is inside the plan's effective dates, picks the season with `season_for()` (calendar month), and returns the first period whose `applies_on(day)` is true and whose window contains the local clock time, falling back to the `fallback=True` period. Windows are half-open and may cross midnight. It does not look up the plan itself: callers pass the period in force, usually from `get_rate_plan_for_date()`. Most consumers should use `price_usage()` or `rate_at()` instead, which resolve the period themselves.
+
+### `local_time.py` — Utility time zone
+
+`UTILITY_TIMEZONE` is `America/New_York`. `to_utility_local(when)` and `utility_local_date(when)` are the only place a timestamp is converted to it; naive values are read as already local. Every date decision (tariff period, season, holiday, billing cycle) goes through them. `time_of_use.LOCAL_TIMEZONE` remains as an alias.
+
+### `units.py` and `models/units.py` — Meter units
+
+`MeterUnit` lives in `models/units.py` so `UsageRead` can use it without an import cycle; `units.py` re-exports it. `to_billing_units(quantity, unit, plan, *, therms_per_ccf)` converts Wh to kWh or ft³ to therms and raises `ValueError` when the unit doesn't measure the plan's commodity. Floats go through `str` on the way to `Decimal`. `DEFAULT_THERMS_PER_CCF` is 1.036: Dominion converts by each billing cycle's average heat content (Gas General Terms and Conditions III.B, in `docs/reference/`), which isn't published, so the default is the U.S. EIA's 24-month South Carolina average.
+
+### `pricing.py` — Pricing usage
+
+`price_usage()`, `rate_at()` and `price_net_usage()` all start with `resolve_plan_for(plan, when)` (in `rates.py`), so callers pass the current plan and get the period that applied. Each plan must have exactly one usage charge (two raise `ValueError`); a plan with none prices at zero. Tiered amounts are the difference in cumulative cost before and after the interval (`_tier_split`), which handles any number of tiers, intervals crossing several boundaries, and negative quantities (solar export) symmetrically. Time-of-use pricing delegates to `get_time_of_use_rate()`. `DemandCharge` names are reported in `unpriced_charges` and never priced. `None` means no period is in effect or the plan's data can't price that moment. Amounts are unrounded `Decimal`s.
+
+### `billing.py` — Billing cycles, `UsagePricer` and fixed charges
+
+`estimate_billing_cycles()` is the integration's algorithm, moved unchanged: it walks back and forward from the forecast's current cycle using `billing_cycle_length()`'s observed month table. Cycles can be off by a day or two. `UsagePricer` prices reads in time order and resets cycle-to-date usage when a read falls in a different cycle; a read counts as out of order only when it is earlier both as an instant and on the local wall clock, so both labellings of the hours around a DST change are accepted (Green Button feeds include nonexistent spring-forward times such as 02:45). `fixed_charges(plan, cycle)` charges daily charges per day at that day's tariff period and monthly charges once per cycle, from the period on the cycle's last day.
 
 ### `helpers.py`
 
@@ -447,11 +486,22 @@ uv run pytest --cov=dominionsc --cov-report=term-missing
 | `test_transport.py` | `cache_buster()` | Pure assertions |
 | `test_exceptions_coverage.py` | Exception `__str__` formatting | Pure assertions |
 | `test_main_coverage.py` | `python -m dominionsc` entry point | Mock |
-| `test_public_api.py` | `typing.get_type_hints()` resolves on every exported dataclass; `isinstance()` works with the `Charge` union | Runtime introspection |
+| `test_public_api.py` | `typing.get_type_hints()` resolves on every exported dataclass; `isinstance()` works with the `Charge` union; every pricing name is exported | Runtime introspection |
+| `test_local_time.py` | `utility_local_date()`, `resolve_plan_for()`, `closed_to_new_customers` | Pure assertions |
+| `test_units.py` | `espi:uom` parsing, `to_billing_units()` | Pure/fixture-based |
+| `test_pricing.py` | `price_usage()`, `rate_at()`, `price_net_usage()`: tiers, seasons, time of use, flat, gas, solar netting, edge cases | Pure assertions, values ported from `ha-dominion-sc` |
+| `test_billing.py` | Billing-cycle estimation, `UsagePricer`, `fixed_charges()`, and the equivalence test against `tests/legacy/` | Pure assertions; the equivalence test is marked `slow` |
+| `test_data_availability.py` | Days with no data yet are absent; all-zero days are kept | Fixture-based |
 
 ### Test fixtures
 
-`tests/fixtures/greenbutton_multi_register.xml` is a redacted real-structure Green Button XML with two UsagePoints (grid delivery and solar export). Use it to test multi-register parsing. `tests/fixtures/greenbutton_gas_scaled.xml` is a gas feed whose `ReadingType` declares `powerOfTenMultiplier=-3`; it covers the consumption scaling described above. If you add new parsing behavior, add a corresponding fixture or extend the XML.
+`tests/fixtures/greenbutton_multi_register.xml` is a redacted real-structure Green Button XML with two UsagePoints (grid delivery and solar export). Use it to test multi-register parsing. `tests/fixtures/greenbutton_gas_scaled.xml` is a gas feed whose `ReadingType` declares `powerOfTenMultiplier=-3`; it covers the consumption scaling described above. `tests/fixtures/greenbutton_gas_recent.xml` is a real gas capture trimmed to two days, requested through the day it was captured; it shows that days with no data yet are absent. If you add new parsing behavior, add a corresponding fixture or extend the XML.
+
+Fixtures made from real captures must be redacted: replace customer, UsagePoint, MeterReading, IntervalBlock, ReadingType and LocalTimeParameters ids and every `urn:uuid` with `REDACTED_*` placeholders, and keep timestamps and values.
+
+### The legacy equivalence test
+
+`tests/legacy/ha_pricing.py` is a frozen copy of `ha-dominion-sc`'s 0.3.0-era pricing (`cost.py`, `billing.py` and the cycle-tracking loop of `aggregation.py`, with Home Assistant parts removed). `test_usage_pricer_matches_legacy` prices 16 months of synthetic reads for every catalog plan through both and requires per-read and total agreement within 1e-9 USD. Its gas cases pin `therms_per_ccf=1`, the factor the old code hard-codes. Skip it for a quick run with `uv run pytest -m "not slow"`, and delete the package once the integration has migrated to the library's pricing.
 
 ### Mocking HTTP
 
@@ -488,7 +538,7 @@ Rate plans are defined one per module in `src/dominionsc/rate_plans/` using type
 1. Archive the outgoing values first so historical usage can still be priced. In each affected plan module (for example `rate_plans/rate_8.py`), copy the current plan to a new constant (for example `RATE_8_2026`) with the old `effective_from` and an `effective_to` set to the day before the new effective date, and insert it in that module's `HISTORY` ahead of the current plan (oldest first). Import it in `rates.py` and add it to `rates.py`'s `__all__` and to `dominionsc/__init__.py` and its `__all__`. Each archived period defines its own dates in its plan module, as `RATE_6_2025` and `RATE_8_2025` do. Record the fixed charges and `source_url` too, so the archived period is a complete plan.
 2. Update `effective_from` on the current `RATE_*` constant in each affected `rate_plans/rate_*.py` module (plans whose tariff did not change keep their existing date).
 3. Update the `Decimal` amounts in the same constants (e.g., `DailyCharge(amount=Decimal("0.36164"))`) and set `source_url` to the link for the new tariff document.
-4. Update `tests/test_rates.py` — find the assertions for the changed plan and update the expected values, and add tests for the archived period.
+4. Update `tests/test_rates.py` — find the assertions for the changed plan and update the expected values, and add tests for the archived period. Add a pricing test in `tests/test_pricing.py` for a date on each side of the change, so `price_usage()` is shown to switch periods.
 5. Update the effective dates and any changed plan details in `docs/api-reference.md` and `docs/ha-integration-contract.md`, and add a `docs/CHANGELOG.md` entry.
 
 **When a new charge type or structure is added:**
@@ -499,6 +549,7 @@ Rate plans are defined one per module in `src/dominionsc/rate_plans/` using type
 4. Use the new type in the relevant `RATE_*` constant in its `rate_plans/rate_*.py` module.
 5. Add tests in `test_rates.py`.
 6. Document the new type in `docs/api-reference.md` under the Charge union table.
+7. Decide how pricing handles it. A new usage-based charge needs a branch in `pricing.py` (`_usage_charge()`, `rate_at()` and `_price_billing_units()`); a new fixed charge needs handling in `billing.fixed_charges()`; a charge that can't be priced per interval should be listed in `unpriced_charges` like `DemandCharge`. Add tests in `test_pricing.py` or `test_billing.py`.
 
 **When a new plan is added:**
 
@@ -517,6 +568,14 @@ Rate plans are defined one per module in `src/dominionsc/rate_plans/` using type
 5. Update `tests/test_rates.py` and `docs/api-reference.md`.
 
 Rate plans are purely declarative data — changing them does not affect the API communication logic.
+
+### Update the gas therm factor
+
+`DEFAULT_THERMS_PER_CCF` in `src/dominionsc/units.py` is an estimate. If better evidence turns up (for example a gas bill showing CCF and therms for a cycle), update the constant and its docstring, the expected values in `tests/test_units.py` and `test_gas_default_therm_factor` in `tests/test_pricing.py`, the plan's Q1 in `docs/PRICING_API_PLAN.md`, and the CHANGELOG. Tests that compare against the integration's old output keep `therms_per_ccf=1`.
+
+### Add a reference document
+
+Keep copies of Dominion documents the billing rules rely on in `docs/reference/`, and list each in `docs/reference/README.md` with its source URL, the date it was copied, its effective date and what it's used for. When Dominion revises one, add the new copy alongside the old one (put the effective date in the file name) and update the citations.
 
 ### Add TFA support for a new delivery method
 
@@ -551,6 +610,14 @@ Dominion Energy SC uses Bidgely as a third-party energy analytics platform. The 
 
 Solar/net-metered accounts have two physical registers in the same API response: one for grid delivery (positive values) and one for solar export (negative values). Merging them with `parse_usage_reads` produces overlapping timestamps and mixed signs with no way to distinguish the registers. `parse_registers` keeps them separate so consumers can handle each register independently.
 
+### Why does pricing live in the library?
+
+The integration used to carry its own copy of the tariff logic, and a library fix to the Rate 5/7 weekday and holiday rules didn't reach it, so it overpriced weekend and holiday peak hours. With pricing in the library, a tariff fix reaches every consumer by upgrading. The design and every decision are recorded in `docs/PRICING_API_PLAN.md`.
+
+### How exact is pricing?
+
+As close as the evidence allows, never exact. Dominion doesn't publish its billing calculations, so the library follows the tariffs and observed data and documents each approximation: estimated billing-cycle boundaries, the gas therm factor, and a cycle that spans a tariff change being charged day by day. Pro-rating on first or last bills and reconnection charges are deliberately out of scope: the library prices the data and billing dates it is given.
+
 ### Why is `flow_direction` in `RegisterReads` but unreliable?
 
 The ESPI specification includes a `flowDirection` field to indicate whether a register measures delivered or generated energy. Dominion Energy SC reports `flowDirection=1` for both the grid-delivery and solar-export registers, making it useless for distinguishing them. The field is preserved in case other utilities' data populates it correctly, but Dominion Energy SC consumers must not rely on it.
@@ -566,4 +633,8 @@ The ESPI specification includes a `flowDirection` field to indicate whether a re
 | Single-account constraint is hard-coded | `auth.py` | Multi-account support unknown; report if you encounter it |
 | TFA is always expected | `auth.py` | Accounts without TFA raise `InvalidAuth`; report if you encounter it |
 | Bidgely pilot ID default is hard-coded | `const.py` | Ideally discovered per account; callers can override it per instance with the `pilot_id` constructor argument. See the note in `const.py` |
-| Data is delayed 24–48 hours | External | Bidgely's metering pipeline delay; nothing the library can change |
+| Data is delayed 24–48 hours | External | Bidgely's metering pipeline delay; nothing the library can change. Days not yet available are absent from the feed |
+| Billing cycles before the current one are estimated | `billing.py` | Only the forecast's current cycle is known; earlier and later cycles may be a day or two off |
+| Gas therm factor is an estimate | `units.py` | Dominion's per-cycle heat content isn't published; 1.036 is a statewide average |
+| A tariff change inside a billing cycle is applied day by day | `rates.py`, `billing.py` | Unverified; the tariffs say "first billing cycle of", which may mean the whole cycle switches (plan Q2) |
+| Minimum-bill floor for net-metered credits isn't modeled | `pricing.py`, `billing.py` | Deferred |

@@ -502,6 +502,9 @@ from dominionsc import (
 | `description` | `str` | Optional free-text description. |
 | `source_url` | `str` | Link to the published tariff document this plan was transcribed from, for future reference. Empty string when not recorded. |
 
+`RatePlan.closed_to_new_customers` (property, added in 0.4.0) is `True` when the plan has a `closed_to_new_customers`
+eligibility rule. Only Rate 1 does.
+
 #### `Charge` union type
 
 The `Charge` type alias represents any of six concrete charge classes:
@@ -757,7 +760,9 @@ moment `when`. It applies the season, the clock windows, and each period's weekd
 `America/New_York`. For interval data, pass the interval's start time.
 
 Pass the plan that was in effect at `when` (`get_rate_plan_for_date`), because the rules differ between tariff
-periods. `get_rate_plan_for_date` returns `None` when no period is recorded, so check for that first.
+periods. `get_rate_plan_for_date` returns `None` when no period is recorded, so check for that first. To skip that
+step, use [`rate_at()` or `price_usage()`](#rate_at-and-price_usage), which resolve the period in effect themselves and
+return `None` instead of raising.
 
 `get_time_of_use_rate` raises `ValueError` if the plan has no time-of-use charge (anything other than Rates 5
 and 7), if `when` falls outside the plan's effective dates, or if the plan has no periods or no fallback period

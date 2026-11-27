@@ -69,5 +69,36 @@ flowchart TD
 
 ## Response Parsing Flow (Grounded)
 
-- **Historical:** `parsers/greenbutton.py` parses ESPI XML. Registers are separated by `UsagePoint` id (see `register_reads.py`) and returned in first-seen order. Negative values are preserved (a solar-export register may report them). Raw values are multiplied by the feed's declared `powerOfTenMultiplier` (`10 ** multiplier`), which is what converts Dominion's gas readings to cubic feet; electric feeds declare none.
+- **Historical:** `parsers/greenbutton.py` parses ESPI XML. Days whose data isn't available yet are absent from the feed, not returned as zero-valued readings. Registers are separated by `UsagePoint` id (see `register_reads.py`) and returned in first-seen order. Negative values are preserved (a solar-export register may report them). Raw values are multiplied by the feed's declared `powerOfTenMultiplier` (`10 ** multiplier`), which is what converts Dominion's gas readings to cubic feet; electric feeds declare none. Each read's `unit` comes from the feed's `espi:uom` (72 is Wh, 119 is ft³); an unknown or conflicting code leaves it `None` and logs one warning.
 - **Forecast:** `DominionSC.async_get_forecast()` fetches the portal home page (for a fresh verification token), then the `GetAccountAMIUsageAlerts` endpoint; `parsers/forecast.py` turns the JSON into a `Forecast` (`models/forecast.py`).
+
+## Pricing Flow
+
+Pricing is pure computation on data the caller already has; it makes no network calls. A consumer such as
+`ha-dominion-sc` fetches reads and the forecast, then prices them:
+
+```mermaid
+flowchart TD
+    A["async_get_forecast(): current cycle dates"] --> B["estimate_billing_cycles(forecast, earliest, latest)"]
+    C["async_get_register_reads(): UsageRead list per register"] --> D["sort by start_time"]
+    B --> E["UsagePricer(plan, cycles)"]
+    D --> F{"for each read"}
+    E --> F
+    F --> G["ordering check, reset cycle usage at a new billing cycle"]
+    G --> H["to_billing_units(): Wh to kWh, ft³ to therms"]
+    H --> I["resolve_plan_for(plan, when): tariff period in effect"]
+    I --> J{"usage charge"}
+    J -- "tiered" --> K["season_for(local date), split across tiers"]
+    J -- "time of use" --> L["get_time_of_use_rate(period, when)"]
+    J -- "flat" --> M["quantity x price"]
+    J -- "none" --> N["zero"]
+    K --> O["UsageCost (Decimal dollars)"]
+    L --> O
+    M --> O
+    N --> O
+    B --> P["fixed_charges(plan, cycle): daily charges per day, monthly charges once per cycle"]
+```
+
+`price_usage()` and `rate_at()` follow the same path for a single interval or moment, and `price_net_usage()` /
+`UsagePricer.price_net()` price a grid read and a solar-export read for the same interval separately and net them.
+

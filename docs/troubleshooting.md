@@ -11,8 +11,9 @@ This guide covers common errors, their root causes, and how to resolve them.
 3. [API structure errors](#api-structure-errors)
 4. [TFA (two-factor authentication) issues](#tfa-two-factor-authentication-issues)
 5. [Usage data issues](#usage-data-issues)
-6. [CLI issues](#cli-issues)
-7. [Development and testing issues](#development-and-testing-issues)
+6. [Pricing issues](#pricing-issues)
+7. [CLI issues](#cli-issues)
+8. [Development and testing issues](#development-and-testing-issues)
 
 ---
 
@@ -182,7 +183,8 @@ This guide covers common errors, their root causes, and how to resolve them.
 **Symptom:** `async_get_register_reads()` returns an empty list, or `RegisterReads.reads` is empty.
 
 **Cause:**
-- The date range has no data yet (data is delayed 24–48 hours).
+- The date range has no data yet (data is delayed 24–48 hours). Days that aren't available yet are left out of the
+  response entirely, not returned as zero readings, so a range ending today usually stops a day or two short.
 - The date range is too old (Bidgely typically retains 12–13 months).
 - The `start_date` and `end_date` are equal or reversed.
 - The account type (`ELECTRIC`/`GAS`) does not match the account's active services.
@@ -197,6 +199,9 @@ This guide covers common errors, their root causes, and how to resolve them.
    ```
 2. Verify the measurement type with `async_get_accounts()` — only use types present in `measurement_types`.
 3. Check the date range is valid: `start_date < end_date`.
+
+A day whose readings are all zero is different: it's real data (for example a gas account that used no gas that
+day). Keep it rather than treating it as missing.
 
 ---
 
@@ -216,7 +221,7 @@ This guide covers common errors, their root causes, and how to resolve them.
 
 **Cause:** Older versions of the library ignored the `powerOfTenMultiplier` that Dominion's gas feed declares (`-3`, so raw values are thousandths of a cubic foot) and returned the raw values as cubic feet. Electric data was never affected.
 
-**Fix:** Upgrade to a version that includes the fix (see the "Fixed" entry under Unreleased in the [changelog](CHANGELOG.md)). Values you already stored from an affected version need to be divided by 1000.
+**Fix:** Upgrade to 0.2.0 or later (see the "Fixed" entry under 0.2.0 in the [changelog](CHANGELOG.md)). Values you already stored from an affected version need to be divided by 1000.
 
 ---
 
@@ -230,6 +235,64 @@ This guide covers common errors, their root causes, and how to resolve them.
 1. Verify `BIDGELY_PILOT_ID = "10078"` in `src/dominionsc/const.py`.
 2. If the value is correct but the issue persists, capture the `gb-download` request URL from your browser's DevTools while logged into the Dominion portal and check which pilot ID appears in the `X-Bidgely-Pilot-Id` request header.
 3. If your account needs a different pilot ID than the library default (e.g. a distinct Bidgely pipeline), pass the correct value directly instead of patching `const.py`: `DominionSC(session, username, password, pilot_id="<correct_id>")`.
+
+---
+
+## Pricing issues
+
+### `price_usage()` or `rate_at()` returns `None`
+
+**Cause:** Nothing could be priced at that moment:
+- The time is before the plan's earliest recorded tariff period (for example before 2025-07-23 for most electric
+  plans), or in a gap between periods.
+- A custom time-of-use plan has no window matching that time and no `fallback` period, or a custom tiered plan has no
+  tiers for the season.
+
+**Fix:** Treat `None` as "nothing to price" (zero cost). A plan with only fixed charges is not this case: it returns a
+zero amount rather than `None`.
+
+---
+
+### `ValueError: ... measured in Wh, not ft3` (or the reverse)
+
+**Cause:** The meter unit doesn't match the plan's commodity, for example gas readings priced under an electric plan.
+
+**Fix:** Pass `MeterUnit.WATT_HOUR` with electric plans and `MeterUnit.CUBIC_FOOT` with gas plans. `UsageRead.unit`
+holds the unit the feed declared; it is `None` if the feed didn't declare one the library recognizes.
+
+---
+
+### `ValueError: reads must be in time order`
+
+**Cause:** `UsagePricer` received a read earlier than the previous one. Tier splits depend on order, so it refuses
+rather than guess.
+
+**Fix:** Sort reads by `start_time` before pricing, and price each register with its own `UsagePricer` (or pair the grid
+and solar reads for each interval with `price_net()`). The repeated and skipped hours at daylight-saving changes are
+accepted either way.
+
+---
+
+### Calculated costs don't match my bill
+
+**Cause:** The library estimates; it can't reproduce a bill exactly:
+- Dominion doesn't expose past billing-cycle dates, so earlier cycles are estimated and may be a day or two off,
+  which moves the tier split and the daily Basic Facilities Charge.
+- Gas is converted at 1.036 therms per CCF by default. Dominion uses each cycle's measured heat content, which isn't
+  published.
+- `price_usage()` covers usage charges only. Fixed charges come from `fixed_charges()`, and Rate 7's demand charge is
+  never priced (it is listed in `unpriced_charges`).
+- Taxes, and charges outside the rate schedule, are not included.
+
+**Fix:** For gas, pass the real factor if you know it (therms divided by CCF on a bill) with `therms_per_ccf`. For
+billing cycles, pass the dates from your bills as `BillingCycle`s instead of estimates.
+
+---
+
+### Gas costs are about 3.6% higher than the Home Assistant integration's
+
+**Cause:** The integration converted gas at exactly 1 therm per CCF (ft³ ÷ 100). The library's default is 1.036,
+closer to the heat content Dominion bills on. This is intended.
 
 ---
 

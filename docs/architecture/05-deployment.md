@@ -47,7 +47,8 @@ flowchart TB
     end
 
     subgraph Registry["Distribution"]
-        PyPI["pypi.org / dominion-sc-power"]
+        PyPI["pypi.org / dominion-sc-power (0.3.0 and earlier)"]
+        Manual["wheel copied into the HA deps directory (0.4.0, publishing hold)"]
     end
 
     subgraph Consumer["Downstream"]
@@ -57,11 +58,19 @@ flowchart TB
     Source --> Package
     Lock --> Venv
     Package --> Wheel --> PyPI --> HA_Integration
+    Wheel --> Manual --> HA_Integration
 ```
+
+Releases are tagged on the fork (`hype8912/dominion-sc-power`, for example `v0.4.0`). While the PyPI publishing hold
+is in place, don't create a GitHub release: `python-publish.yaml` publishes to PyPI when one is published. The
+integration's maintainer installs the wheel built with `uv build` into the Home Assistant instance's `deps`
+directory by hand.
 
 ## Test Strategy (Grounded)
 
-- `tests/` directory present; `pytest` (with `pytest-asyncio` in `auto` mode) is used, with fixtures in `tests/fixtures/`.
+- `tests/` directory present; `pytest` (with `pytest-asyncio` in `auto` mode) is used, with fixtures in `tests/fixtures/`. Fixtures made from real API captures are redacted (account, customer, meter and document ids replaced with `REDACTED_*`).
+- `tests/legacy/` holds a frozen copy of `ha-dominion-sc`'s 0.3.0-era pricing. `test_billing.py`'s equivalence test (marked `slow`) prices 16 months of synthetic reads for every catalog plan through both and requires them to agree within 1e-9 USD. Delete the package once the integration has migrated.
+- Every module is held at 100% line and branch coverage.
 - Coverage is reported through `pytest-cov`; the HTML report is written to `htmlcov/`, which is not committed.
 - `test.yaml` runs on push and pull request, on Python 3.14.
 - `lint.yml` runs `ruff check` and `ruff format --check` on push and pull request through `astral-sh/ruff-action`, which installs Ruff itself (no Python setup or package install).

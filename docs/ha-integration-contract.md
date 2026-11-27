@@ -303,8 +303,27 @@ from dominionsc import (
     get_time_of_use_rate,
     TimeOfUseRate,
     season_for,
+    # Pricing usage (0.4.0+):
+    MeterUnit,
+    price_usage,
+    price_net_usage,
+    rate_at,
+    UsageCost,
+    NetUsageCost,
+    RateQuote,
+    # Billing cycles and fixed charges (0.4.0+):
+    BillingCycle,
+    UsagePricer,
+    estimate_billing_cycles,
+    fixed_charges,
+    # Utilities (0.4.0+):
+    resolve_plan_for,
+    utility_local_date,
+    UTILITY_TIMEZONE,
 )
 ```
+
+These pricing names need `dominion-sc-power==0.4.0` or later. Pin it in both `manifest.json` and `pyproject.toml`.
 
 ### Available plans (effective July 1, 2026)
 
@@ -513,6 +532,9 @@ The `DominionSC.get_timezone()` method returns the IANA timezone name string if 
 | Timezone-aware datetimes | All `start_time` / `end_time` values are timezone-aware. Never naive datetimes. |
 | Solar-export sign | Solar-export registers carry consistently negative `consumption` values in practice. |
 | Single-account enforcement | The library raises `InvalidAuth` if the account has multiple service addresses; the HA integration will never receive mixed-address data. |
+| No placeholder days | Days with no data yet are absent from read results, never returned as zero-valued readings. Every returned day is complete. |
+| Reading units (0.4.0+) | `UsageRead.unit` / `RegisterReads.unit` is `MeterUnit.WATT_HOUR` for electric and `MeterUnit.CUBIC_FOOT` for gas when the feed declares it, else `None`. |
+| Pricing results (0.4.0+) | `price_usage`, `rate_at`, `price_net_usage` and `UsagePricer` return `Decimal` dollars and resolve the tariff period themselves. `None` only means nothing can be priced at that moment; a plan with only fixed charges returns zero. |
 
 ---
 
@@ -533,6 +555,17 @@ When this interface is eventually updated to return `AccountInfo` directly, `ha-
 ### `async_get_register_reads()` vs `async_get_usage_reads()`
 
 `async_get_usage_reads()` was the original flat API. `async_get_register_reads()` was added later to support solar/net-metered accounts. New HA code should use `async_get_register_reads()` exclusively.
+
+### 0.4.0: pricing moves into the library
+
+0.4.0 only adds API; nothing existing changed. Two things change for the integration when it adopts the pricing API:
+
+- **Gas costs rise about 3.6%,** because the library converts at 1.036 therms per CCF and the integration converted at
+  exactly 1 (`ft³ / 100`). This is intended.
+- **Stored history keeps the old prices** until the user runs Recalculate History; say so in the release notes.
+
+The zero-day filter in `_process_and_insert_statistics` should be deleted, not replaced: unavailable days never arrive
+as zeros, so it can only drop real zero-usage days. See `docs/PRICING_API_PLAN.md` §6 for the full migration list.
 
 ### `typical_cost: float | None`
 

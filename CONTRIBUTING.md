@@ -92,6 +92,9 @@ uv run pytest
 uv run pytest tests/test_dominionsc.py -v
 uv run pytest -k "login" -v
 
+# Skip the slow legacy-equivalence test for a quick run
+uv run pytest -m "not slow"
+
 # Type checking, when working on typed code (mypy is not a dev dependency,
 # so run it through uv's on-demand install)
 uv run --with mypy mypy src/dominionsc
@@ -127,6 +130,13 @@ and publish jobs install with pip, and the lint job runs Ruff through
 
 A release is published by GitHub Actions when a GitHub release is created.
 Verify the package version and generated distributions before publishing.
+
+PyPI publishing is currently on hold. Release by bumping the version in
+`pyproject.toml`, running `uv lock`, moving the CHANGELOG's `Unreleased` entries
+under a version heading, and pushing an annotated `vX.Y.Z` tag. Do not create a
+GitHub release while the hold is in place, because that publishes to PyPI. The
+Home Assistant integration's maintainer installs the wheel from `uv build` by
+hand.
 
 ## Troubleshooting
 
@@ -166,6 +176,11 @@ Before opening a pull request:
 6. Run `./scripts/lint` and `./scripts/test`.
 7. Review the diff for credentials, tokens, generated files, and unrelated
    formatting changes.
+8. Redact any test fixture made from a real API capture: replace account,
+   customer, meter and document ids with `REDACTED_*` placeholders (see the
+   developer guide's "Test fixtures" section).
+9. When a billing rule rests on a Dominion document, keep a copy in
+   `docs/reference/` and list it in `docs/reference/README.md`.
 
 Never commit Dominion credentials, MFA codes, login data, or files containing
 account information. The repository ignores common local data-file names,

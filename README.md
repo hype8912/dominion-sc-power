@@ -17,6 +17,12 @@ This library is used by the custom [Home Assistant Integration for Dominion Ener
   for pricing historical usage
 - Time-of-use price lookup (`get_time_of_use_rate()`) for Rates 5 and 7, including
   weekday and holiday rules
+- Usage pricing (`price_usage()`, `rate_at()`, `UsagePricer`): give it a plan, a time and a meter quantity,
+  and it returns dollars. It picks the tariff period in effect, the season, the tier (splitting an interval
+  across tier boundaries) or the time-of-use period, and converts Wh and ft³ to kWh and therms
+- Solar net metering (`price_net_usage()`): usage and generation priced separately at the same rate, then netted
+- Billing-cycle estimation and fixed charges (`estimate_billing_cycles()`, `fixed_charges()`)
+- Every reading carries its unit (`MeterUnit`: Wh or ft³), taken from the feed
 
 ## Supported Rate Plans
 
@@ -57,6 +63,33 @@ old_plan = get_rate_plan_for_date("rate_8", date(2025, 9, 1))
 Superseded periods are available through `get_rate_plan_history()` and
 `get_rate_plan_for_date()`; see the [API reference](docs/api-reference.md#rate-plans).
 
+## Pricing Usage
+
+Pass the plan you're on, usually the current one; the library uses the tariff period in effect at each time.
+
+```python
+from datetime import date, datetime
+
+from dominionsc import RATE_8, BillingCycle, MeterUnit, UsagePricer, fixed_charges, price_usage
+
+# One interval: 2 kWh in August 2026, with 799 kWh already used this billing cycle
+cost = price_usage(RATE_8, datetime(2026, 8, 1, 14), 2000, MeterUnit.WATT_HOUR, cycle_usage_before=799_000)
+print(cost.amount, cost.tiers)  # 0.33320 ('First 800 kWh', 'Over 800 kWh')
+
+# A stream of reads, resetting the tier counter at each billing cycle
+cycle = BillingCycle(date(2026, 8, 1), date(2026, 8, 30))
+pricer = UsagePricer(RATE_8, [cycle])
+for read in sorted(reads, key=lambda r: r.start_time):  # reads: one register's UsageRead list
+    cost = pricer.price(read.start_time, read.consumption, MeterUnit.WATT_HOUR)
+
+# Fixed charges for the cycle: the daily Basic Facilities Charge and the $1.00 DER charge
+print(fixed_charges(RATE_8, cycle))  # 11.84920
+```
+
+Costs are estimates. Dominion doesn't publish its billing calculations, so the library follows the tariffs and
+observed patterns as closely as it can. See [Pricing usage](docs/api-reference.md#pricing-usage) for the details
+and the known approximations, such as the gas therm factor and estimated billing-cycle boundaries.
+
 ## Limitations
 
 - Only one service address per Dominion account is currently supported, because the API responses for
@@ -64,7 +97,9 @@ Superseded periods are available through `get_rate_plan_history()` and
   Please report it under issues and include the relevant API response.
 - TFA is required, because the login flow without TFA is not known. If this applies to you, please report the
   error under issues.
-- Data is delayed by 24-48 hours, because that is when Dominion reports it.
+- Data is delayed by 24-48 hours, because that is when Dominion reports it. Days that aren't available yet are
+  missing from the results, not returned as zeros; a day of all-zero readings is real data.
+- Calculated costs are estimates, not bills (see [Pricing Usage](#pricing-usage)).
 
 ## Installation
 
@@ -72,6 +107,13 @@ Requires Python 3.14 or higher.
 
 ```bash
 pip install dominion-sc-power
+```
+
+Version 0.4.0, which adds the pricing API, is not on PyPI yet. Install it from the release tag, or from a wheel
+built with `uv build`:
+
+```bash
+pip install "git+https://github.com/hype8912/dominion-sc-power@v0.4.0"
 ```
 
 ## Development
@@ -88,6 +130,8 @@ is structured and how its pieces fit together, see the
 - [Troubleshooting](docs/troubleshooting.md): common errors and how to resolve them
 - [Home Assistant integration contract](docs/ha-integration-contract.md): what `ha-dominion-sc` can rely on
 - [Architecture](docs/architecture/README.md): diagrams of the library's structure and data flow
+- [Pricing API plan](docs/PRICING_API_PLAN.md): the design, decisions and open questions behind the pricing API
+- [Reference documents](docs/reference/README.md): copies of the Dominion tariff documents the billing rules cite
 - [Changelog](docs/CHANGELOG.md)
 
 ## Command Line Interface
