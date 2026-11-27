@@ -403,3 +403,8 @@ class RatePlan:
     adjustments: tuple[Adjustment, ...] = ()
     description: str = ""
     source_url: str = ""
+
+    @property
+    def closed_to_new_customers(self) -> bool:
+        """Whether the tariff is closed to new customers (it has a ``closed_to_new_customers`` eligibility rule)."""
+        return any(rule.code == "closed_to_new_customers" for rule in self.eligibility_rules)

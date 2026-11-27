@@ -233,6 +233,10 @@ Instead, distinguish registers by `usage_point_id` (which is stable) or by the s
 - Pass `datetime` objects; that is the annotated type. Both arguments are required — omitting either raises `ValueError`.
 - Data availability: Bidgely typically provides the last 12-13 months. Requests beyond that return empty lists.
 - Data latency: readings are typically delayed 24-48 hours. Data for yesterday may not yet be available.
+- Days with no data yet are **absent** from the response, not returned as zero-valued readings. Every day that is
+  returned is complete (96 readings per register per day for electric, 24 for gas). Detect "not available yet" by
+  a day being missing, never by its readings adding up to zero: an all-zero day is real data (a gas account with no
+  usage that day). Do not filter all-zero days.
 
 ```python
 from datetime import datetime, timedelta
@@ -383,6 +387,38 @@ for charge in plan.charges:
             print(f"Summer energy ({limit}): ${tier.price_per_unit}/kWh")
 ```
 
+### Pricing usage (0.4.0+)
+
+From 0.4.0 the integration should not walk `charges` to price usage. The library owns that:
+
+| Need | Library call |
+|------|--------------|
+| Cost of one interval or hourly row | `price_usage(plan, start, quantity, MeterUnit.WATT_HOUR or CUBIC_FOOT, cycle_usage_before=...)` |
+| Cost of a chronological stream, with tier resets at billing-cycle boundaries | `UsagePricer(plan, estimate_billing_cycles(forecast, earliest, latest=today))`, then `.price()` or `.observe()` per read |
+| Fixed charges for a billing cycle (daily Basic Facilities, $1.00 DER, gas connection charge) | `fixed_charges(plan, cycle)`: once per cycle for monthly charges, per day for daily ones |
+| Usage cost and solar credit for one hour, netted | `UsagePricer.price_net(when, used, generated, unit)` or `price_net_usage(...)` |
+| "Current rate" sensor | `rate_at(plan, now, cycle_kwh)`, mapping the `RateQuote` fields into attributes |
+| Which tariff period applies | `resolve_plan_for(plan, when)` (done for you by all of the above) |
+| Utility-local date | `utility_local_date(when)` |
+| Rate 1's "closed to new customers" label | `plan.closed_to_new_customers` |
+
+Rules the integration can rely on:
+
+- Pass the selected plan (for example `RATE_8`); the period in effect at each timestamp is chosen for you.
+- `None` means "nothing to price" (before the earliest recorded period, or a moment the plan can't price).
+  Treat it as zero cost. A plan with only fixed charges returns a zero amount, not `None`.
+- Rate 7's demand charge is never in `amount`; it is named in `unpriced_charges`.
+- For net-metered accounts, pair each hour's grid and solar-export reads and call
+  `UsagePricer.price_net(when, used, generated, unit)` (or `price_net_usage`). The result has the usage cost
+  and the generation credit separately (`usage`, `generation`) and their net (`amount`). Generation is credited
+  at the same rate as usage in that hour, and the export register's negative values can be passed as is.
+- Hourly rows re-read from the recorder carry no unit: pass `MeterUnit.WATT_HOUR` for electric accounts and
+  `MeterUnit.CUBIC_FOOT` for gas accounts. Gas is converted at `DEFAULT_THERMS_PER_CCF` (1.036 therms per CCF
+  unless `therms_per_ccf` is given). The integration's `/ 100` is a factor of 1, so migrating raises computed gas
+  cost by about 3.6%, which is intended: it is closer to the heat content Dominion bills on.
+- Amounts are `Decimal`; convert with `float()` for statistics.
+- Re-pricing only reaches stored statistics after the user runs Recalculate History.
+
 ### What the HA integration should NOT do with rate plans
 
 - **Do not treat them as live data** — they are static package data, not fetched from the API.
@@ -429,9 +465,12 @@ except InvalidAuth:
 
 | Service | Field | Unit | Conversion |
 |---------|-------|------|------------|
-| ELECTRIC | `UsageRead.consumption` | Watt-hours (Wh) | Divide by 1000 for kWh |
+| ELECTRIC | `UsageRead.consumption` | Watt-hours (Wh) | `to_billing_units(q, MeterUnit.WATT_HOUR, plan)` → kWh |
 | ELECTRIC (solar export) | `UsageRead.consumption` | Watt-hours (Wh), **negative** | Absolute value for energy exported |
-| GAS | `UsageRead.consumption` | Cubic feet (ft³) | Divide by 100 for approximate therms (exact BTU conversion varies) |
+| GAS | `UsageRead.consumption` | Cubic feet (ft³) | `to_billing_units(q, MeterUnit.CUBIC_FOOT, plan)` → therms. The default of 1.036 therms per CCF is an estimate: Dominion uses each billing cycle's average heat content (normally 0.95 to 1.40 therms per CCF), which isn't in the feed. |
+
+From 0.4.0, `UsageRead.unit` and `RegisterReads.unit` carry the unit from the feed's `espi:uom`
+(`MeterUnit.WATT_HOUR` or `MeterUnit.CUBIC_FOOT`), or `None` if the feed doesn't declare a recognized unit.
 
 ### Datetime timezone
 
@@ -461,7 +500,8 @@ The `DominionSC.get_timezone()` method returns the IANA timezone name string if 
 | Single register for ELECTRIC | Most accounts have only one register. Only net-metered solar accounts have two. |
 | `flow_direction` unreliable | Do not use to determine grid vs. solar for Dominion Energy SC. |
 | `MfaChallenge` on any login | Even with a saved token, the token may have expired. |
-| 24-48 hour data lag | Data for recent days may not yet be available. |
+| 24-48 hour data lag | Data for recent days may not yet be available. Those days are missing from the response, not zero-filled. |
+| All-zero days | Real data (for example gas with no usage). Keep them; don't treat them as missing. |
 
 ### Things the library guarantees
 

@@ -29,7 +29,43 @@ def test_exported_dataclass_type_hints_resolve(cls: type) -> None:
 def test_exported_dataclasses_found() -> None:
     """The parametrized test above actually covers the core models."""
     names = {cls.__name__ for cls in _EXPORTED_DATACLASSES}
-    assert {"UsageRead", "Forecast", "RegisterReads", "RatePlan"} <= names
+    assert {"UsageRead", "Forecast", "RegisterReads", "RatePlan", "RateQuote", "UsageCost", "BillingCycle"} <= names
+
+
+# Names added for the pricing API (docs/PRICING_API_PLAN.md, 0.4.0).
+_PRICING_API = [
+    "DEFAULT_THERMS_PER_CCF",
+    "UTILITY_TIMEZONE",
+    "BillingCycle",
+    "MeterUnit",
+    "NetUsageCost",
+    "RateQuote",
+    "UsageCost",
+    "UsagePricer",
+    "billing_cycle_length",
+    "estimate_billing_cycles",
+    "find_billing_cycle",
+    "fixed_charges",
+    "price_net_usage",
+    "price_usage",
+    "rate_at",
+    "resolve_plan_for",
+    "to_billing_units",
+    "utility_local_date",
+]
+
+
+@pytest.mark.parametrize("name", _PRICING_API)
+def test_pricing_api_is_exported(name: str) -> None:
+    """Each pricing name is in ``__all__`` and importable from the package root."""
+    assert name in dominionsc.__all__
+    assert getattr(dominionsc, name) is not None
+
+
+def test_all_names_resolve() -> None:
+    """Everything in ``__all__`` exists on the package."""
+    missing = [name for name in dominionsc.__all__ if not hasattr(dominionsc, name)]
+    assert missing == []
 
 
 def test_charge_union_supports_isinstance() -> None:

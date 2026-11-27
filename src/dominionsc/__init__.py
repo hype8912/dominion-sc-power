@@ -52,9 +52,18 @@ and API reference documentation, and ``CONTRIBUTING.md`` for contributor
 setup instructions.
 """
 
+from .billing import (
+    BillingCycle,
+    UsagePricer,
+    billing_cycle_length,
+    estimate_billing_cycles,
+    find_billing_cycle,
+    fixed_charges,
+)
 from .dominionsc import DominionSC, DominionSCTFAHandler
 from .exceptions import ApiException, CannotConnect, InvalidAuth, MfaChallenge
 from .helpers import create_cookie_jar
+from .local_time import UTILITY_TIMEZONE, utility_local_date
 from .models.forecast import Forecast
 from .models.rate_plan import (
     Adjustment,
@@ -76,7 +85,9 @@ from .models.rate_plan import (
     UsageUnit,
 )
 from .models.register_reads import RegisterReads
+from .models.units import MeterUnit
 from .models.usage_read import UsageRead
+from .pricing import NetUsageCost, RateQuote, UsageCost, price_net_usage, price_usage, rate_at
 from .rates import (
     RATE_1,
     RATE_1_2025,
@@ -103,10 +114,13 @@ from .rates import (
     get_rate_plan,
     get_rate_plan_for_date,
     get_rate_plan_history,
+    resolve_plan_for,
 )
 from .time_of_use import TimeOfUseRate, get_time_of_use_rate, season_for
+from .units import DEFAULT_THERMS_PER_CCF, to_billing_units
 
 __all__: list[str] = [
+    "DEFAULT_THERMS_PER_CCF",
     "RATE_1",
     "RATE_1_2025",
     "RATE_2",
@@ -128,8 +142,10 @@ __all__: list[str] = [
     "RESIDENTIAL_ELECTRIC_RATE_PLANS",
     "RESIDENTIAL_GAS_RATE_PLANS",
     "RESIDENTIAL_RATE_PLANS",
+    "UTILITY_TIMEZONE",
     "Adjustment",
     "ApiException",
+    "BillingCycle",
     "CannotConnect",
     "Charge",
     "Commodity",
@@ -142,9 +158,12 @@ __all__: list[str] = [
     "Forecast",
     "Holiday",
     "InvalidAuth",
+    "MeterUnit",
     "MfaChallenge",
     "MonthlyCharge",
+    "NetUsageCost",
     "RatePlan",
+    "RateQuote",
     "RegisterReads",
     "Season",
     "TieredUsageCharge",
@@ -152,14 +171,26 @@ __all__: list[str] = [
     "TimeOfUsePeriod",
     "TimeOfUseRate",
     "TimeWindow",
+    "UsageCost",
+    "UsagePricer",
     "UsageRead",
     "UsageTier",
     "UsageUnit",
+    "billing_cycle_length",
     "create_cookie_jar",
+    "estimate_billing_cycles",
+    "find_billing_cycle",
+    "fixed_charges",
     "get_available_rate_plans",
     "get_rate_plan",
     "get_rate_plan_for_date",
     "get_rate_plan_history",
     "get_time_of_use_rate",
+    "price_net_usage",
+    "price_usage",
+    "rate_at",
+    "resolve_plan_for",
     "season_for",
+    "to_billing_units",
+    "utility_local_date",
 ]

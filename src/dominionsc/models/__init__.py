@@ -5,6 +5,7 @@ Exports:
     Forecast       - billing forecast data
     UsageRead      - a single interval meter reading
     RegisterReads  - interval readings grouped by meter register (UsagePoint)
+    MeterUnit      - the unit a reading's consumption is in (Wh, ft³)
     RatePlan, the Charge variants, and supporting types - declarative tariff
                      models (see rate_plan.py)
 """
@@ -31,6 +32,7 @@ from .rate_plan import (
     UsageUnit,
 )
 from .register_reads import RegisterReads
+from .units import MeterUnit
 from .usage_read import UsageRead
 
 __all__: list[str] = [
@@ -44,6 +46,7 @@ __all__: list[str] = [
     "FlatUsageCharge",
     "Forecast",
     "Holiday",
+    "MeterUnit",
     "MonthlyCharge",
     "RatePlan",
     "RegisterReads",

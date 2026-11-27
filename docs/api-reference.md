@@ -18,7 +18,13 @@ This document covers the complete public API of the `dominionsc` package. Everyt
    - [Rate plan catalog](#rate-plan-catalog)
    - [Catalog lookup functions](#catalog-lookup-functions)
    - [Time-of-use rate lookup](#time-of-use-rate-lookup)
-6. [Utilities](#utilities)
+6. [Pricing usage](#pricing-usage)
+   - [Utility-local time](#utility-local-time)
+   - [`resolve_plan_for()`](#resolve_plan_for)
+   - [Units](#units)
+   - [`rate_at()` and `price_usage()`](#rate_at-and-price_usage) (and `price_net_usage()`)
+   - [Billing cycles and `UsagePricer`](#billing-cycles-and-usagepricer)
+7. [Utilities](#utilities)
 
 ---
 
@@ -197,6 +203,12 @@ for reg in registers:
 
 **Solar note:** Solar-export registers carry **negative** `consumption` values. The library does not label registers as "grid" or "solar" — use the stable `usage_point_id` to distinguish them in your application.
 
+**Days with no data yet:** the most recent day or days, whose readings Dominion hasn't published yet, are
+**absent** from the result. They are not returned as zero-valued readings (confirmed against a live capture on
+2026-11-27, see `tests/fixtures/greenbutton_gas_recent.xml`). Every day that is returned is complete. A day whose
+readings are all zero is a real no-usage day, common for gas in summer, and must not be treated as "not available
+yet".
+
 ---
 
 ### `async_get_usage_reads()`
@@ -331,7 +343,8 @@ A single interval meter reading.
 |-------|------|-------------|
 | `start_time` | `datetime` | Timezone-aware start of the measurement interval. |
 | `end_time` | `datetime` | Timezone-aware end of the interval (inclusive; one second before the next interval's start). |
-| `consumption` | `float` | Energy or volume consumed. **Electric:** Watt-hours (Wh). Divide by 1000 for kWh. **Gas:** Cubic feet (ft³). **Solar export:** Negative Wh values. |
+| `consumption` | `float` | Energy or volume consumed, in `unit`. **Electric:** Watt-hours (Wh). **Gas:** Cubic feet (ft³). **Solar export:** Negative Wh values. Use [`to_billing_units()`](#units) or [`price_usage()`](#rate_at-and-price_usage) rather than converting by hand. |
+| `unit` | `MeterUnit \| None` | Unit of `consumption`, from the feed's `espi:uom` (`72` → `WATT_HOUR`, `119` → `CUBIC_FOOT`). `None` when the feed declares no unit, an unknown one (logged as a warning once per feed), or several. Added in 0.4.0; last field with a default, so positional construction is unchanged. |
 
 **Interval length:** Dominion Energy SC reports 15-minute intervals for electric accounts. Gas intervals are typically 1 hour.
 
@@ -350,6 +363,7 @@ Interval readings grouped by physical meter register (ESPI UsagePoint).
 | `usage_point_id` | `str` | Stable ESPI UsagePoint identifier. Confirmed constant across separate exports. Safe to use as a persistent key (e.g., for Home Assistant statistic IDs). |
 | `flow_direction` | `str \| None` | ESPI `flowDirection` from the register's `ReadingType`. **Unreliable for Dominion Energy SC** — both grid and solar registers report `flowDirection=1`. Do not use this to distinguish registers. |
 | `reads` | `list[UsageRead]` | Interval readings for this register in the order encountered. |
+| `unit` | `MeterUnit \| None` | Unit of every reading's `consumption` (same rules as `UsageRead.unit`). Added in 0.4.0. |
 
 **Usage:**
 
@@ -754,6 +768,189 @@ crosses midnight.
 **calendar** month of `day`, not the billing month the tariffs name, so each interval is priced by the month it
 falls in and a billing cycle that spans a season boundary is split between seasons. To price by billing month
 instead, pick the season yourself and read `TimeOfUseCharge.periods_by_season` directly.
+
+---
+
+## Pricing usage
+
+Added in 0.4.0. These functions price meter usage without the caller knowing how a `RatePlan` is structured:
+pass a plan, a timestamp, a quantity in the meter's unit and (for tiered plans) cycle-to-date usage, and get
+dollars back. Every entry point resolves the tariff period in effect at the timestamp, so a fix to a tariff in
+the library reaches every consumer without code changes.
+
+```python
+from datetime import datetime
+from dominionsc import RATE_8, MeterUnit, price_usage, rate_at
+
+cost = price_usage(RATE_8, datetime(2026, 8, 1, 14, 0), 2000, MeterUnit.WATT_HOUR, cycle_usage_before=799_000)
+print(cost.amount, cost.tiers)  # 0.33320 ('First 800 kWh', 'Over 800 kWh')
+
+quote = rate_at(RATE_8, datetime.now(), cycle_usage=812.4)  # cycle_usage in kWh
+print(quote.price_per_unit, quote.tier)
+```
+
+All dates (tariff period, season, holiday, billing cycle) are taken in `America/New_York`. Naive `datetime`
+values are read as local time; aware values are converted. Amounts are `Decimal` and unrounded. Quantities may
+be `Decimal`, `float` or `int`; floats are converted through `str`, so `0.1` is `Decimal("0.1")`.
+
+### Utility-local time
+
+```python
+from dominionsc import UTILITY_TIMEZONE, utility_local_date
+```
+
+- `UTILITY_TIMEZONE`: `ZoneInfo("America/New_York")`. `dominionsc.time_of_use.LOCAL_TIMEZONE` remains as an
+  alias.
+- `utility_local_date(when) -> date`: the calendar date of `when` in that zone. `2026-07-01 02:00 UTC` gives
+  `2026-06-30`.
+
+### `resolve_plan_for()`
+
+```python
+resolve_plan_for(plan: RatePlan, when: datetime | date) -> RatePlan | None
+```
+
+Returns the tariff period of `plan` in effect at `when`. For catalog codes this is
+`get_rate_plan_for_date(plan.code, local_date)`, so passing `RATE_5` for a 2025 date returns `RATE_5_2025`.
+A plan whose code is not in the catalog is returned as is when the local date is within its
+`effective_from`..`effective_to` (inclusive), else `None`. A `date` is used as given; a `datetime` is converted
+to its local date.
+
+### Units
+
+```python
+from dominionsc import DEFAULT_THERMS_PER_CCF, MeterUnit, to_billing_units
+```
+
+| Name | Description |
+|------|-------------|
+| `MeterUnit.WATT_HOUR` (`"Wh"`) | Electric meter unit (ESPI `uom` 72). |
+| `MeterUnit.CUBIC_FOOT` (`"ft3"`) | Gas meter unit (ESPI `uom` 119). |
+| `DEFAULT_THERMS_PER_CCF` | `Decimal("1.036")`: estimated therms per hundred cubic feet (1,036 BTU per cubic foot, the 24-month average for South Carolina gas deliveries from the U.S. EIA). The integration's historical `ft³ / 100` is a factor of exactly `1`. |
+
+`to_billing_units(quantity, unit, plan, *, therms_per_ccf=DEFAULT_THERMS_PER_CCF) -> Decimal` converts a meter
+quantity into the plan's billing unit: Wh → kWh for electric plans, ft³ → therms for gas plans. The gas factor is
+an approximation: Dominion converts using the average heat content of its gas over each billing cycle (tariff
+section III.B), which changes every cycle and is normally 0.95 to 1.40 therms per CCF. The default of 1.036 is the
+average heat content of South Carolina gas deliveries over September 2024 to August 2026 (1,033 to 1,041 in every
+month, per the EIA), not Dominion's own figure. Pass `therms_per_ccf` when you know the factor for a cycle (therms divided by CCF on a bill). It raises
+`ValueError` when the unit doesn't measure the plan's commodity (for example ft³ on an electric plan).
+
+### `rate_at()` and `price_usage()`
+
+```python
+rate_at(plan, when, cycle_usage=None) -> RateQuote | None
+price_usage(plan, when, quantity, unit, *, cycle_usage_before=0, therms_per_ccf=DEFAULT_THERMS_PER_CCF) -> UsageCost | None
+```
+
+`rate_at` answers "what does the next unit cost at `when`?". `cycle_usage` is cycle-to-date usage in the
+**billing unit** (kWh or therm) and picks the tier for tiered plans; `None` reports the first tier.
+
+`price_usage` prices `quantity` (in the **meter unit**) for an interval starting at `when`. It works for any
+interval length; the whole interval is priced as of its start. `cycle_usage_before` is cycle-to-date usage in
+the same meter unit, before this interval.
+
+Both return `None` when no tariff period is in effect at `when`, or when the plan's time-of-use or tier data
+can't price that moment (for example a time-of-use plan with no fallback period). A plan with no usage charge
+(only fixed charges) prices usage at zero. Both raise `ValueError` if the plan in effect has more than one usage-based charge; `price_usage`
+also raises it for a unit/commodity mismatch.
+
+How each charge is priced:
+
+| Charge | Pricing |
+|--------|---------|
+| `TieredUsageCharge` | Season from `season_for(local date)`. The quantity is split across every tier boundary it crosses, for any number of tiers. A tier with `upper_bound=None` (or the last tier) takes all remaining usage. |
+| `TimeOfUseCharge` | `get_time_of_use_rate(resolved_plan, when)`. |
+| `FlatUsageCharge` | quantity × price. |
+| `DemandCharge` | Never priced; its name is listed in `unpriced_charges` (Rate 7: `"On-Peak Billing Demand"`). |
+| `DailyCharge`, `MonthlyCharge` | Not included. |
+
+**Solar generation (net metering).** Generation is credited at the same rate usage costs at that moment: the
+same tier and season on tiered plans, the same time-of-use period on Rate 5 and 7. It offsets usage, and on
+tiered plans it also lowers cycle-to-date usage.
+
+Use `price_net_usage` to price an interval's usage and generation together:
+
+```python
+price_net_usage(plan, when, used, generated, unit, *, cycle_usage_before=0, therms_per_ccf=...) -> NetUsageCost | None
+```
+
+```python
+result = price_net_usage(RATE_8, when, 10_000, 5_000, MeterUnit.WATT_HOUR)  # 10 kWh used, 5 kWh generated
+result.usage.amount       # cost of the 10 kWh used
+result.generation.amount  # credit for the 5 kWh generated (negative)
+result.amount             # net: the same as pricing 5 kWh
+```
+
+`NetUsageCost` has `usage` and `generation` (each a full `UsageCost`), plus the net `amount` and net
+`quantity`. `generated` is a size; a solar-export register's negative read can be passed as is. Generation is
+priced after the interval's usage, so on a tiered plan it offsets the highest-tier energy first. The net
+`amount` always equals pricing the net quantity directly, including when the hour crosses a tier boundary, and
+an hour that exports more than it uses is a net credit (negative `amount`). `price_usage` also accepts a
+negative quantity and credits it the same way.
+
+**`RateQuote`** fields: `plan` (the period actually used), `price_per_unit`, `usage_unit`, `season` (`None` for
+flat plans), `period` (time-of-use period name or `None`), `tier` and `tier_upper_bound` (`None` for non-tiered
+plans), `unpriced_charges`.
+
+**`UsageCost`** fields: `amount` (dollars), `quantity` (in the billing unit, after conversion), `plan`, `season`,
+`period`, `tiers` (every tier the quantity touched, in order; a zero quantity reports the current tier),
+`unpriced_charges`.
+
+### Billing cycles and `UsagePricer`
+
+```python
+from dominionsc import BillingCycle, UsagePricer, billing_cycle_length, estimate_billing_cycles, find_billing_cycle, fixed_charges
+```
+
+Dominion doesn't expose past billing-cycle boundaries, so they are estimated from the forecast's current
+cycle using the observed meter-read schedule. The estimate can be off by a day or two at cycle edges.
+
+| Name | Description |
+|------|-------------|
+| `BillingCycle(start, end)` | One cycle; `end` is inclusive. `contains(day)` tests membership. |
+| `billing_cycle_length(start) -> int` | Estimated length of the cycle starting on `start`. |
+| `estimate_billing_cycles(anchor, earliest, latest=None)` | Tuple of cycles, oldest first, from `earliest` through the anchor and on to `latest`. `anchor` is a `BillingCycle` or a `Forecast` (its `start_date`/`end_date`). |
+| `find_billing_cycle(day, cycles)` | The cycle containing `day`, or `None`. |
+| `fixed_charges(plan, cycle)` | Fixed charges for one cycle; see below. |
+
+`UsagePricer(plan, cycles=(), *, therms_per_ccf=...)` prices a chronological stream of reads and keeps the
+cycle-to-date counter that tiered plans need:
+
+```python
+cycles = estimate_billing_cycles(forecast, earliest=start.date(), latest=date.today())
+pricer = UsagePricer(RATE_8, cycles)
+for read in sorted(reads, key=lambda r: r.start_time):
+    if already_recorded(read):
+        pricer.observe(read.start_time, read.consumption, MeterUnit.WATT_HOUR)  # counts, doesn't price
+    elif (cost := pricer.price(read.start_time, read.consumption, MeterUnit.WATT_HOUR)) is not None:
+        record(read.start_time, cost.amount)
+```
+
+- The counter resets when a read's local date is in a different cycle from the previous read's. Dates outside
+  every cycle count as one more cycle of their own; with no cycles the counter never resets.
+- `cycle_usage` is the counter, in billing units.
+- Reads must be in time order. A read is rejected with `ValueError` only when it is earlier than the previous
+  read both as an instant and on the local wall clock, so either labelling of the hours around a DST change is
+  accepted.
+- `price()` counts the usage even when it returns `None`.
+
+**Fixed charges.** `fixed_charges(plan, cycle) -> Decimal` returns the non-usage charges for one billing cycle:
+
+- Daily charges (the electric Basic Facilities Charge) are charged for each day of the cycle, both ends counted,
+  using the tariff period in effect on each day.
+- Monthly charges (the electric $1.00 Distributed Energy Resource charge and the gas $10.90 Basic Facilities
+  Charge) are charged **once per billing cycle**, whatever its length and whatever the usage. "Month" means
+  billing cycle. The amount comes from the period in effect on the cycle's last day.
+- Days with no tariff period in effect cost nothing. Usage charges and Rate 7's demand charge are not included.
+- It is an estimate. The cycle's boundaries are usually estimated and may be a day or two off, which moves the daily
+  total by that many days' charge. Dominion doesn't publish its billing algorithms, so these rules are inferred from
+  the tariffs and observed patterns and won't match every bill exactly. A cycle is charged for the dates it is given;
+  pro-rating on a first or last bill and reconnection charges are out of scope. The tariffs' minimum-bill rule for
+  net-metered accounts is not modeled yet.
+- A cycle with `end` before `start` raises `ValueError`.
+- For a net-metered account, `price_net(when, used, generated, unit)` prices each interval's usage and
+  generation separately, returns a `NetUsageCost`, and adds the net to `cycle_usage`.
 
 ---
 

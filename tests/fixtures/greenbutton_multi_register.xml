@@ -76,6 +76,7 @@
         <espi:flowDirection>1</espi:flowDirection>
         <espi:commodity>1</espi:commodity>
         <espi:intervalLength>900</espi:intervalLength>
+        <espi:uom>72</espi:uom>
       </espi:ReadingType>
     </content>
   </entry>

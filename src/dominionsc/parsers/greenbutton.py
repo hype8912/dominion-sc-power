@@ -29,11 +29,18 @@ import xmltodict
 
 from ..exceptions import ApiException
 from ..models.register_reads import RegisterReads
+from ..models.units import MeterUnit
 from ..models.usage_read import UsageRead
 
 _LOGGER = logging.getLogger(__name__)
 
 _USAGE_POINT_RE = re.compile(r"/UsagePoint/([^/]+)")
+
+# ESPI unit-of-measure codes (``espi:uom``) the library understands.
+_UOM_UNITS: dict[str, MeterUnit] = {
+    "72": MeterUnit.WATT_HOUR,
+    "119": MeterUnit.CUBIC_FOOT,
+}
 
 
 def _ensure_list(value: object) -> list[Any]:
@@ -102,6 +109,56 @@ def _extract_power_of_ten_multiplier(entry: dict[str, Any]) -> int | None:
         return None
 
 
+def _reading_type(entry: dict[str, Any]) -> dict[str, Any] | None:
+    """Return an entry's ``espi:ReadingType`` content, or ``None`` if it has none."""
+    content: Any = entry.get("content")
+    if not isinstance(content, dict):
+        return None
+    reading_type: Any = content.get("espi:ReadingType")
+    return reading_type if isinstance(reading_type, dict) else None
+
+
+def _extract_uom(entry: dict[str, Any]) -> str | None:
+    """Pull the ``espi:uom`` code out of a ``ReadingType`` entry, if present."""
+    reading_type: dict[str, Any] | None = _reading_type(entry)
+    if reading_type is None:
+        return None
+    raw: Any = reading_type.get("espi:uom")
+    return None if raw is None else str(raw).strip()
+
+
+def _resolve_unit(entries: list[dict[str, Any]]) -> MeterUnit | None:
+    """Determine the unit every reading in a Green Button feed is in.
+
+    Collects every distinct ``espi:uom`` declared in the feed's ``ReadingType``
+    entries. Like :func:`_resolve_scale_factor`, the unit is applied to the
+    whole feed, so it is only reported when the feed agrees on a single code
+    the library recognizes. An unrecognized code, or several different codes,
+    gives ``None`` and logs one warning for the feed, so the gap is visible
+    instead of silently mislabelling readings.
+
+    Returns:
+        The ``MeterUnit``, or ``None`` when the feed declares no unit, an
+        unknown unit, or more than one unit.
+
+    """
+    codes: set[str] = {code for entry in entries if (code := _extract_uom(entry))}
+    if not codes:
+        _LOGGER.debug("Green Button feed declares no ReadingType uom; reads have no unit")
+        return None
+    if len(codes) > 1:
+        _LOGGER.warning(
+            "Multiple distinct ReadingType uom values found in one feed (%s); reads are left without a unit.",
+            sorted(codes),
+        )
+        return None
+    only: str = next(iter(codes))
+    unit: MeterUnit | None = _UOM_UNITS.get(only)
+    if unit is None:
+        _LOGGER.warning("Unknown ReadingType uom %s in Green Button feed; reads are left without a unit.", only)
+    return unit
+
+
 def _resolve_scale_factor(entries: list[dict[str, Any]]) -> float:
     """Determine the consumption scale factor for a Green Button feed.
 
@@ -141,7 +198,12 @@ def _resolve_scale_factor(entries: list[dict[str, Any]]) -> float:
     return float(10**multiplier)
 
 
-def _parse_intervals(entry: dict[str, Any], tz: zoneinfo.ZoneInfo, scale: float) -> list[UsageRead]:
+def _parse_intervals(
+    entry: dict[str, Any],
+    tz: zoneinfo.ZoneInfo,
+    scale: float,
+    unit: MeterUnit | None = None,
+) -> list[UsageRead]:
     """Parse all IntervalReading elements in one entry into UsageRead objects.
 
     ``scale`` (from :func:`_resolve_scale_factor`) converts each raw
@@ -153,6 +215,7 @@ def _parse_intervals(entry: dict[str, Any], tz: zoneinfo.ZoneInfo, scale: float)
         entry: One "Interval Consumption" ``<entry>`` dict from xmltodict.
         tz: Timezone attached to each reading's timestamps.
         scale: Multiplier applied to every raw ``espi:value``.
+        unit: Unit attached to every reading (from :func:`_resolve_unit`).
 
     Returns:
         One ``UsageRead`` per ``espi:IntervalReading``, in document order.
@@ -175,6 +238,7 @@ def _parse_intervals(entry: dict[str, Any], tz: zoneinfo.ZoneInfo, scale: float)
                 start_time=datetime.fromtimestamp(time_start, UTC).replace(tzinfo=tz),
                 end_time=datetime.fromtimestamp(time_end, UTC).replace(tzinfo=tz),
                 consumption=consumption,
+                unit=unit,
             )
         )
     return reads
@@ -217,6 +281,7 @@ def parse_registers(xml_text: str, timezone: str, url: str | None = None) -> lis
         # Computed once per feed from every ReadingType entry present (not
         # just interval-consumption ones) -- see _resolve_scale_factor.
         scale: float = _resolve_scale_factor(entries)
+        unit: MeterUnit | None = _resolve_unit(entries)
 
         # Preserve first-seen order of UsagePoints while accumulating.
         registers: dict[str, RegisterReads] = {}
@@ -229,8 +294,8 @@ def parse_registers(xml_text: str, timezone: str, url: str | None = None) -> lis
 
             usage_point_id: str = _extract_usage_point_id(entry) or ""
             if usage_point_id not in registers:
-                registers[usage_point_id] = RegisterReads(usage_point_id=usage_point_id)
-            registers[usage_point_id].reads.extend(_parse_intervals(entry, tz, scale))
+                registers[usage_point_id] = RegisterReads(usage_point_id=usage_point_id, unit=unit)
+            registers[usage_point_id].reads.extend(_parse_intervals(entry, tz, scale, unit))
 
         return list(registers.values())
 

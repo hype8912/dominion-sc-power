@@ -5,18 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
-from zoneinfo import ZoneInfo
 
-from .config import DEFAULT_CONFIG
+from .local_time import UTILITY_TIMEZONE, to_utility_local
 from .models.rate_plan import Season, TimeOfUseCharge
 
 if TYPE_CHECKING:
     from datetime import date, datetime, time
+    from zoneinfo import ZoneInfo
 
     from .models.rate_plan import RatePlan, TimeOfUsePeriod, TimeWindow
 
-# The tariffs' clock times are local to the utility's service territory.
-LOCAL_TIMEZONE: ZoneInfo = ZoneInfo(DEFAULT_CONFIG.timezone)
+# The tariffs' clock times are local to the utility's service territory. Kept as an alias of
+# ``dominionsc.UTILITY_TIMEZONE`` for code that imported it from here before 0.4.0.
+LOCAL_TIMEZONE: ZoneInfo = UTILITY_TIMEZONE
 
 # Summer is billing months May-September; every other month is winter.
 _SUMMER_MONTHS: frozenset[int] = frozenset(range(5, 10))
@@ -81,7 +82,7 @@ def get_time_of_use_rate(plan: RatePlan, when: datetime) -> TimeOfUseRate:
             period for the season.
 
     """
-    local: datetime = when.replace(tzinfo=LOCAL_TIMEZONE) if when.tzinfo is None else when.astimezone(LOCAL_TIMEZONE)
+    local: datetime = to_utility_local(when)
     day: date = local.date()
     if day < plan.effective_from or (plan.effective_to is not None and day > plan.effective_to):
         msg = f"{day} is outside {plan.code}'s effective dates ({plan.effective_from} to {plan.effective_to})"

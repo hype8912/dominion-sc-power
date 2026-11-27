@@ -17,6 +17,7 @@ See docs/REFACTOR_PLAN.md and the multi-register work.
 
 from dataclasses import dataclass, field
 
+from .units import MeterUnit
 from .usage_read import UsageRead
 
 
@@ -42,3 +43,9 @@ class RegisterReads:
 
     reads: list[UsageRead] = field(default_factory=list)
     """Interval readings for this register, in the order encountered."""
+
+    unit: MeterUnit | None = None
+    """Unit of every reading's ``consumption``, from the feed's ``espi:uom``.
+
+    ``None`` when the feed doesn't declare a unit the library recognizes.
+    """

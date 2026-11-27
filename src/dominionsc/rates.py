@@ -6,9 +6,11 @@ it brings them together into the catalog mappings, the per-code history, and the
 
 from __future__ import annotations
 
+from datetime import datetime
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from .local_time import utility_local_date
 from .rate_plans import rate_1, rate_2, rate_5, rate_6, rate_7, rate_8, rate_32s, rate_32v
 from .rate_plans.rate_1 import RATE_1, RATE_1_2025
 from .rate_plans.rate_2 import RATE_2, RATE_2_2025
@@ -51,6 +53,7 @@ __all__: list[str] = [
     "get_rate_plan",
     "get_rate_plan_for_date",
     "get_rate_plan_history",
+    "resolve_plan_for",
 ]
 
 # Catalogs of the *current* period of each plan, keyed by plan code. Wrapped in
@@ -116,4 +119,33 @@ def get_rate_plan_for_date(code: str, on: date) -> RatePlan | None:
     for plan in get_rate_plan_history(code):
         if plan.effective_from <= on and (plan.effective_to is None or on <= plan.effective_to):
             return plan
+    return None
+
+
+def resolve_plan_for(plan: RatePlan, when: datetime | date) -> RatePlan | None:
+    """Return the tariff period of *plan* in effect at *when*, or ``None`` when none is.
+
+    Pass any period of a plan (usually the current one, such as ``RATE_8``) and this returns the period that
+    applied at *when*, so pricing a 2025 date with ``RATE_5`` uses ``RATE_5_2025``'s prices and rules.
+
+    - **Catalog plans** (``plan.code`` has a history in ``RATE_PLAN_HISTORY``): the catalog period in effect
+      on *when*'s local date, from ``get_rate_plan_for_date``. The catalog is authoritative for its codes, so
+      the period returned may be a different object from *plan*.
+    - **Other plans**: *plan* itself when the local date is within ``effective_from`` to ``effective_to``
+      (both inclusive), otherwise ``None``.
+
+    Args:
+        plan: Any period of the plan to resolve.
+        when: A ``datetime`` (naive values are read as local time, aware values are converted to
+            ``America/New_York``) or a ``date``, which is used as is.
+
+    Returns:
+        The ``RatePlan`` in effect, or ``None`` before the earliest known period or in a gap between periods.
+
+    """
+    day: date = utility_local_date(when) if isinstance(when, datetime) else when
+    if get_rate_plan_history(plan.code):
+        return get_rate_plan_for_date(plan.code, day)
+    if plan.effective_from <= day and (plan.effective_to is None or day <= plan.effective_to):
+        return plan
     return None
