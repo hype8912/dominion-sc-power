@@ -9,11 +9,81 @@ bumped for a release.
 
 ## Unreleased
 
+## [0.4.0] - 2026-11-27
+
+### Added
+
+- **Pricing API** (docs/PRICING_API_PLAN.md, phases 1-5). Consumers can now price usage without reading a
+  plan's charges:
+  - `price_usage(plan, when, quantity, unit, *, cycle_usage_before=0, therms_per_ccf=...)` returns a `UsageCost`
+    (amount, converted quantity, tariff period used, season, time-of-use period, tiers touched, unpriced
+    charges). Tiered pricing splits an interval across any number of tier boundaries; the integration's copy
+    assumed exactly two tiers.
+  - `price_net_usage(plan, when, used, generated, unit, ...)` and `UsagePricer.price_net(...)` price an
+    interval's usage and solar generation separately and net them, returning a `NetUsageCost` (`usage`,
+    `generation`, net `amount` and `quantity`). Generation is credited at the same rate as usage at that
+    moment, and the net always equals pricing the net quantity directly. `price_usage` also accepts a
+    negative quantity and credits it the same way.
+  - `rate_at(plan, when, cycle_usage=None)` returns a `RateQuote` for the price in force at a moment.
+  - `UsagePricer` prices a chronological stream of reads, resetting cycle-to-date usage at billing-cycle
+    boundaries (`observe()` counts usage without pricing it).
+  - `BillingCycle`, `billing_cycle_length`, `estimate_billing_cycles` and `find_billing_cycle`, moved from
+    ha-dominion-sc with the algorithm unchanged. `estimate_billing_cycles` accepts a `Forecast` as the anchor.
+  - `resolve_plan_for(plan, when)` returns the tariff period in effect at a moment. Unlike the integration's
+    version, it also honours `effective_to` for plans outside the catalog.
+  - `UTILITY_TIMEZONE` and `utility_local_date(when)`. `dominionsc.time_of_use.LOCAL_TIMEZONE` stays as an
+    alias, and `get_time_of_use_rate` now uses the shared conversion.
+  - `MeterUnit` (`WATT_HOUR`, `CUBIC_FOOT`), `to_billing_units()` and `DEFAULT_THERMS_PER_CCF` (1.036
+    therms per CCF, an estimate from the EIA's South Carolina average heat content over 24 months. Dominion's tariff
+    converts with each billing cycle's average heat content, normally 0.95 to 1.40, so pass `therms_per_ccf` when you
+    know it. The integration's `ft³ / 100` is a factor of 1, so gas costs priced through the library are about 3.6%
+    higher than before.)
+- `fixed_charges(plan, cycle)` prices a billing cycle's fixed charges: daily charges for each day of the cycle, using
+  the tariff period in effect each day, and monthly charges (the $1.00 DER charge and the gas connection charge)
+  once per cycle regardless of its length. Estimates only: a cycle is charged for the dates it is given;
+  pro-rating and reconnection charges are out of scope, and the minimum-bill rule isn't modeled yet.
+- `UsageRead.unit` and `RegisterReads.unit`: the reading unit from the feed's `espi:uom`. Unknown or
+  conflicting codes give `None` and log one warning per feed. Both are new last fields with a default, so
+  existing constructor calls are unaffected.
+- `RatePlan.closed_to_new_customers` property.
+- Documented that days with no data yet are absent from `async_get_register_reads` / `async_get_usage_reads`
+  results rather than returned as zero-valued readings (checked against a live capture), so an all-zero day is
+  real data and should not be filtered out. Covered by a new redacted fixture, `greenbutton_gas_recent.xml`.
+
+## [0.3.0] - 2026-11-26
+
 ### Added
 
 - `get_time_of_use_rate(plan, when)`, `TimeOfUseRate`, and `season_for(day)`: return the on-peak / off-peak /
   super-off-peak price in force at a given moment, including weekday and holiday rules. Seasons are chosen by
   calendar month, and a `TimeWindow` whose end is before its start crosses midnight.
+- `Holiday` enum (New Year's Day, Memorial Day, Independence Day, Labor Day, Thanksgiving Day, Christmas Day) with
+  `date_in(year)`, and `TimeOfUsePeriod.weekdays_only`, `TimeOfUsePeriod.excluded_holidays` and
+  `TimeOfUsePeriod.applies_on(day)`, so a period's windows can be limited to weekdays excluding holidays.
+- `time_of_use_charge()` options `on_peak_weekdays_only` and `winter_midday_super_off_peak`.
+
+### Changed
+
+- **Breaking:** Python 3.14 or newer is now required (was 3.11). Python 3.11-3.13 can no longer install or import
+  the package.
+- Ruff and mypy now target Python 3.14, and the CI test and publish jobs run on Python 3.14.
+- The CI lint workflow now runs Ruff through `astral-sh/ruff-action` instead of installing the package with pip.
+- Added PyPI classifiers, including `Programming Language :: Python :: 3.14` and `Typing :: Typed`.
+
+### Fixed
+
+- `typing.get_type_hints()` now works on every exported dataclass. `RatePlan`, `TimeOfUseRate`, `TimeWindow`,
+  `TieredUsageCharge`, `TimeOfUseCharge` and `EligibilityRule` previously raised `NameError` because their field
+  types were imported only for type checking.
+- **Rate 5 and Rate 7 time-of-use windows before July 2026.** `RATE_5_2024`, `RATE_5_2025` and `RATE_7_2025` now
+  limit on-peak to Monday-Friday excluding the six tariff holidays, and define super-off-peak as 1-5 AM only
+  (no winter 12-3 PM window), as those tariffs state. The July 2026 plans (`RATE_5`, `RATE_7`) keep on-peak every
+  day and the winter 12-3 PM super-off-peak window (PSC Order No. 2026-374).
+
+## [0.2.0] - 2026-09-22
+
+### Added
+
 - `RatePlan.source_url`: link to the published tariff document a plan was transcribed from (empty string when
   not recorded).
 - Superseded tariff periods, archived as `RatePlan` objects with `effective_to` set and their `source_url`:
@@ -27,10 +97,6 @@ bumped for a release.
   the same way, as is Rate 32S's September 2025 tariff.
 - `time_of_use_charge()` in `rate_plans/_common.py` builds the on-peak / off-peak / super-off-peak energy charge
   shared by Rates 5 and 7.
-- `Holiday` enum (New Year's Day, Memorial Day, Independence Day, Labor Day, Thanksgiving Day, Christmas Day) with
-  `date_in(year)`, and `TimeOfUsePeriod.weekdays_only`, `TimeOfUsePeriod.excluded_holidays` and
-  `TimeOfUsePeriod.applies_on(day)`, so a period's windows can be limited to weekdays excluding holidays.
-- `time_of_use_charge()` options `on_peak_weekdays_only` and `winter_midday_super_off_peak`.
 - `get_rate_plan_history(code)` returns every known period for a rate code,
   oldest first (the last entry is the current plan), and
   `get_rate_plan_for_date(code, on)` returns the plan in effect on a date, so
@@ -52,11 +118,6 @@ bumped for a release.
 
 ### Changed
 
-- **Breaking:** Python 3.14 or newer is now required (was 3.11). Python 3.11-3.13 can no longer install or import
-  the package. The package version is now 0.3.0.
-- Ruff and mypy now target Python 3.14, and the CI test and publish jobs run on Python 3.14.
-- The CI lint workflow now runs Ruff through `astral-sh/ruff-action` instead of installing the package with pip.
-- Added PyPI classifiers, including `Programming Language :: Python :: 3.14` and `Typing :: Typed`.
 - Each rate plan now sets its own `effective_from` (there is no longer a shared effective date), since
   tariffs can change independently.
 - Rate plan definitions moved out of `rates.py` into one module per plan under
@@ -66,13 +127,6 @@ bumped for a release.
 
 ### Fixed
 
-- `typing.get_type_hints()` now works on every exported dataclass. `RatePlan`, `TimeOfUseRate`, `TimeWindow`,
-  `TieredUsageCharge`, `TimeOfUseCharge` and `EligibilityRule` previously raised `NameError` because their field
-  types were imported only for type checking.
-- **Rate 5 and Rate 7 time-of-use windows before July 2026.** `RATE_5_2024`, `RATE_5_2025` and `RATE_7_2025` now
-  limit on-peak to Monday-Friday excluding the six tariff holidays, and define super-off-peak as 1-5 AM only
-  (no winter 12-3 PM window), as those tariffs state. The July 2026 plans (`RATE_5`, `RATE_7`) keep on-peak every
-  day and the winter 12-3 PM super-off-peak window (PSC Order No. 2026-374).
 - **Gas consumption was inflated 1000x.** The Green Button parser ignored the
   `powerOfTenMultiplier` declared on each feed's `ReadingType`. Dominion's gas
   feed reports cubic feet (`uom=119`) with a multiplier of `-3`, so raw values
