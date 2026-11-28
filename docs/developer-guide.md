@@ -117,9 +117,9 @@ dominion-sc-power/
 ├── .github/workflows/      # CI: lint.yml, test.yaml, python-publish.yaml
 │
 └── scripts/
-    ├── setup               # Creates .venv via uv sync
-    ├── lint                # Runs ruff format + check
-    └── test                # Runs pytest
+    ├── setup.sh             # Creates .venv via uv sync
+    ├── lint.sh              # Runs ruff format + check
+    └── test.sh              # Runs pytest
 ```
 
 ### Backward-compatibility shims
@@ -172,7 +172,7 @@ uv run --with mypy mypy src/dominionsc
 uv build
 ```
 
-The `./scripts/lint` and `./scripts/test` wrappers run the formatting, lint, and test commands above (not mypy).
+The `./scripts/lint.sh` and `./scripts/test.sh` wrappers run the formatting, lint, and test commands above (not mypy).
 
 ---
 

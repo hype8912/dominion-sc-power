@@ -119,6 +119,7 @@ def get_rate_plan_for_date(code: str, on: date) -> RatePlan | None:
     for plan in get_rate_plan_history(code):
         if plan.effective_from <= on and (plan.effective_to is None or on <= plan.effective_to):
             return plan
+
     return None
 
 
@@ -146,6 +147,8 @@ def resolve_plan_for(plan: RatePlan, when: datetime | date) -> RatePlan | None:
     day: date = utility_local_date(when) if isinstance(when, datetime) else when
     if get_rate_plan_history(plan.code):
         return get_rate_plan_for_date(plan.code, day)
+
     if plan.effective_from <= day and (plan.effective_to is None or day <= plan.effective_to):
         return plan
+
     return None

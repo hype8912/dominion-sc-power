@@ -9,6 +9,10 @@ bumped for a release.
 
 ## Unreleased
 
+### Changed
+
+- Documentation only: `docs/PRICING_API_PLAN.md` §6.1 records the `ha-dominion-sc` migration to the 0.4.0 pricing API.
+
 ## [0.4.0] - 2026-11-27
 
 ### Added

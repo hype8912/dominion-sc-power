@@ -106,7 +106,9 @@ def get_time_of_use_rate(plan: RatePlan, when: datetime) -> TimeOfUseRate:
     )
     if matched is None:
         matched = next((p for p in periods if p.fallback), None)
+
     if matched is None:
         msg = f"{plan.code} has no fallback time-of-use period for {season}"
         raise ValueError(msg)
+
     return TimeOfUseRate(period=matched.name, price_per_kwh=matched.price_per_unit, season=season)

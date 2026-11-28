@@ -566,6 +566,8 @@ When this interface is eventually updated to return `AccountInfo` directly, `ha-
 
 The zero-day filter in `_process_and_insert_statistics` should be deleted, not replaced: unavailable days never arrive
 as zeros, so it can only drop real zero-usage days. See `docs/PRICING_API_PLAN.md` §6 for the full migration list.
+`ha-dominion-sc` has made this migration (branch `refactor/adopt-pricing-api`); §6.1 of the plan records how it uses
+the API and where it differs from the list.
 
 ### `typical_cost: float | None`
 

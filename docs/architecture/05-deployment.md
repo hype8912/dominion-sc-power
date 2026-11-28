@@ -5,7 +5,7 @@
 - `pyproject.toml` — package metadata, runtime dependencies (`aiohttp`, `tzdata`, `xmltodict`), the `dev` optional extra, build-system (`setuptools`), package data (`py.typed`), and tool configs (`ruff`, `pytest`, `mypy`, coverage).
 - `uv.lock` — reproducible lockfile (committed).
 - `.venv/` — virtualenv managed by `uv`; not committed (`.gitignore`).
-- `scripts/setup` — creates or updates `.venv` with `uv sync --extra dev`; `scripts/lint` and `scripts/test` wrap Ruff and pytest.
+- `scripts/setup.sh` — creates or updates `.venv` with `uv sync --extra dev`; `scripts/lint.sh` and `scripts/test.sh` wrap Ruff and pytest.
 - `src/dominionsc/` — source layout (not flat).
 
 ## CI/CD Pipeline Diagram

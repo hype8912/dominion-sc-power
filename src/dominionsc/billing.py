@@ -325,6 +325,7 @@ class UsagePricer:
         if self._last_when is not None and _is_before(local, self._last_when):
             msg = f"reads must be in time order: {when} is before the previous read at {self._last_when}"
             raise ValueError(msg)
+
         self._last_when = local
         if self._cycles:
             cycle: BillingCycle | None = find_billing_cycle(local.date(), self._cycles)

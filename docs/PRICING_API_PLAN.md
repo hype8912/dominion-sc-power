@@ -1,13 +1,15 @@
 # Pricing API Plan — `dominion-sc-power`
 
-**Status:** Library work complete; released as `0.4.0` (2026-11-27). The integration migration (§6) remains.
+**Status:** Library work complete; released as `0.4.0` (2026-11-27). The integration migration (§6) is done on branch
+`refactor/adopt-pricing-api` of `ha-dominion-sc` (2026-11-27), not yet committed or released.
 
 - **Done:** Phases 1-3, Phase 5 (`fixed_charges` using the Q4 decisions, and `closed_to_new_customers`), net
   metering (§4.9, added during implementation).
 - **Resolved without a library change:** Phase 4. Q3 is answered: days with no data yet are absent from the feed,
   not zero-filled (§4.8).
 - **Released:** `0.4.0` (§8), built as a wheel on branch `feat/pricing-api`; not published to PyPI.
-- **Not started:** the integration migration (§6).
+- **Migrated:** `ha-dominion-sc` now uses the pricing API (§6.1). Both projects are still in development; the package
+  will be published to PyPI when the maintainer judges it ready.
 - Decisions that changed or extended this plan during implementation are in §5.1.
 
 **Written against:** library `0.3.0` (`master` at `6f68652`) and the `ha-dominion-sc` working tree of 2026-11-27, which
@@ -567,6 +569,8 @@ one intended difference from the integration.
 
 ## 6. Integration migration (`ha-dominion-sc`) after 0.4.0
 
+The table below is the plan as written. What was actually done, and where it differed, is in §6.1.
+
 For reference, so the library API is shaped around what the integration actually needs. The integration must pin
 `dominion-sc-power==0.4.0` (in both `manifest.json` and `pyproject.toml`) before using any of this.
 
@@ -651,3 +655,66 @@ For reference, so the library API is shaped around what the integration actually
   maintainer installs the built wheel into the HA instance's `deps` directory by hand.
 - **Compatibility:** keep `requires-python = ">=3.14"` and `aiohttp>=3.14.4`. That ties consumers to Home Assistant
   2026.10.0 or newer, the oldest release whose pinned `aiohttp` satisfies this.
+
+### 6.1 Migration record (2026-11-27)
+
+**Result:** `ha-dominion-sc` branch `refactor/adopt-pricing-api`, uncommitted. Production code is about 600 lines
+shorter (+255 / −861 across 10 files). 321 tests pass at 100% line and branch coverage; `ruff check` and
+`ruff format --check` are clean. The pin is `dominion-sc-power==0.4.0` in `manifest.json` and `pyproject.toml`.
+
+**Equivalence check:** the integration's code at `HEAD` (before the migration) and after it were run side by side on
+16 months of synthetic reads (2025-07-01 to 2026-11-14), with timestamps both as true instants and as the parser's
+wall-clock labels, so both DST changes are covered:
+
+- **Statistics path** (`aggregate_hourly_data`, 15-minute electric and hourly gas reads): every hourly cost agrees
+  within 2.2e-16 USD for all six electric plans, fixed and none, with and without already-recorded hours and a cost
+  start date. Billing-cycle resets and tier splits are exercised by about 1,900 kWh a month.
+- **Recalculate History** (hourly UTC rows, window starting mid-cycle): every emitted row agrees within 2.2e-16 USD.
+- **Current-rate sensor:** for every hour of the 16 months, every plan, and cycle usage of unknown, 0, 500, 799.999,
+  800 and 1,500 kWh, price and attributes are identical.
+- **Gas** agrees with the old result times 1.036 (within 3e-14), the one intended change.
+
+**Done as planned:**
+
+| Integration code | Now |
+| --- | --- |
+| `billing.py` | Deleted. `dominionsc.estimate_billing_cycles` replaces it. |
+| `cost.py` pricing (`_calculate_tiered_cost`, `_calculate_tou_cost`, `_calculate_flat_cost`, `_calculate_plan_cost`, `_rate_plan_is_*`, `_utility_local_date`, the plan-for-date block) | Deleted, about 250 lines. `cost.py` keeps the options-to-config helpers and a small `IntervalCostCalculator`. |
+| `current_rate.py` `_plan_in_effect`, `_tiered`, `_time_of_use` | Replaced by `rate_at`; the module only maps a `RateQuote` to sensor attributes. |
+| Cycle-tracking loops in `aggregation.py` and `coordinator.py` | Both replaced by `IntervalCostCalculator`, which wraps `UsagePricer` (`observe()` / `price()`). |
+| Zero-day filter in `_process_and_insert_statistics` | Deleted, not replaced. A test now checks that an all-zero day reaches aggregation. |
+| `DEFAULT_FIXED_RATE` | Removed. `rates.default_fixed_rate()` reads `rate_at(rate_6, now)`, currently 0.15333 instead of the stale 0.14164. |
+| Rate 1 label suffix | Now from `plan.closed_to_new_customers`. |
+
+**Differences from the plan:**
+
+1. **`IntervalCostCalculator` wrapper.** The plan called `UsagePricer` directly. The integration also has `none` and
+   `fixed` cost modes that have no plan, so one small class in `cost.py` handles all three modes behind the same
+   `observe()` / `price()` calls, and holds the account's `MeterUnit`.
+2. **Tier flag removed.** `is_tiered_rate` (and the unused `is_electric` parameter of `aggregate_hourly_data`) are gone.
+   The pricer ignores cycles for non-tiered plans, so the flag had no job. The recalculation path still fetches the
+   forecast only when a rate plan is selected, to avoid an extra network call for fixed-rate users.
+3. **Units by account type.** Hourly rows re-read from the recorder carry no unit, so `meter_unit_for(account)` gives
+   `WATT_HOUR` for electric and `CUBIC_FOOT` for gas.
+4. **Cycle-kWh guard.** `_async_electric_cycle_kwh` used `_rate_plan_is_tiered`; it now asks `rate_at` whether the quote
+   has a tier.
+5. **`season` on the current-rate sensor.** `RateQuote.season` is `None` for plans whose price doesn't depend on it
+   (flat plans), but the sensor used to report the season for every plan and users may rely on it. The integration
+   keeps reporting it for every plan, using `season_for(utility_local_date(now))` when the quote has none.
+6. **Stored fixed rate of 0.** The options form default now distinguishes "not set" from a stored `0.0`, which the old
+   `.get(..., default)` also did and a naive `or` would not.
+
+**Intended behaviour changes (for the integration's release notes):**
+
+- Gas costs rise about 3.6% (1.036 therms per CCF instead of `ft³ / 100`). Tests that pinned the old gas values were
+  updated.
+- Stored history keeps its old prices until the user runs Recalculate History.
+- The fixed-rate form default changes from 0.14164 to the current Rate 6 first-tier price.
+
+**Left for a later change:**
+
+- Fixed charges (`fixed_charges`) are not added to cost statistics. The README still says they are excluded.
+- `net` pricing (`price_net`) is not used, because the integration records each register as its own statistic.
+- Publishing `dominion-sc-power` to PyPI is deferred until the maintainer feels it is ready. Until then the
+  integration's `manifest.json` pin (`==0.4.0`) can't be installed by a stock Home Assistant, and development runs
+  against the sibling checkout (`[tool.uv.sources]` in `pyproject.toml`).

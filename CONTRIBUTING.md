@@ -80,8 +80,8 @@ project environment, so activating `.venv` is optional.
 
 ```bash
 # Repository wrappers (recommended)
-./scripts/lint
-./scripts/test
+./scripts/lint.sh
+./scripts/test.sh
 
 # Direct uv commands
 uv run ruff format .
@@ -100,7 +100,7 @@ uv run pytest -m "not slow"
 uv run --with mypy mypy src/dominionsc
 ```
 
-`./scripts/lint` formats the repository and applies safe Ruff fixes. Use
+`./scripts/lint.sh` formats the repository and applies safe Ruff fixes. Use
 `uv run ruff check .` when you need a check-only command. The test script
 runs pytest with coverage and writes the HTML report to `htmlcov/index.html`.
 
@@ -173,7 +173,7 @@ Before opening a pull request:
    entry to `docs/CHANGELOG.md`.
 4. Update `CONTRIBUTING.md` when the developer workflow changes.
 5. Update `uv.lock` when dependencies change.
-6. Run `./scripts/lint` and `./scripts/test`.
+6. Run `./scripts/lint.sh` and `./scripts/test.sh`.
 7. Review the diff for credentials, tokens, generated files, and unrelated
    formatting changes.
 8. Redact any test fixture made from a real API capture: replace account,
